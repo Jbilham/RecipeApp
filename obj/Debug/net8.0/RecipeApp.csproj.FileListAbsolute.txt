@@ -1,0 +1,8 @@
+/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeApp.csproj.AssemblyReference.cache
+/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/rpswa.dswa.cache.json
+/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeApp.GeneratedMSBuildEditorConfig.editorconfig
+/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeApp.AssemblyInfoInputs.cache
+/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeApp.AssemblyInfo.cs
+/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeApp.csproj.CoreCompileInputs.cache
+/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeAppApp.MvcApplicationPartsAssemblyInfo.cs
+/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeAppApp.MvcApplicationPartsAssemblyInfo.cache
