@@ -120,7 +120,21 @@ namespace RecipeApp.Controllers
             }
 
             await _db.SaveChangesAsync();
+
             var weeklyList = await BuildShoppingListAsync(allRecipeIds, allFreeExtras);
+
+            // 🧾 Save shopping list snapshot for later normalization
+            var snapshot = new ShoppingListSnapshot
+            {
+                Id = Guid.NewGuid(),
+                MealPlanId = null, // Optionally link to createdPlans.FirstOrDefault()?.Id
+                JsonData = System.Text.Json.JsonSerializer.Serialize(weeklyList),
+                SourceType = "weekly",
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _db.ShoppingListSnapshots.Add(snapshot);
+            await _db.SaveChangesAsync();
 
             var response = new WeeklyCreateResponse
             {
@@ -199,7 +213,8 @@ namespace RecipeApp.Controllers
                             .ThenInclude(ri => ri.Unit)
                 .FirstOrDefaultAsync(mp => mp.Id == id);
 
-            if (mealPlan is null) return NotFound();
+            if (mealPlan is null)
+                return NotFound();
 
             var recipeIds = mealPlan.Meals
                 .Where(m => m.RecipeId.HasValue)
@@ -208,6 +223,20 @@ namespace RecipeApp.Controllers
 
             var freeExtras = ExtractFreeItemsFromMeals(mealPlan.Meals.ToList());
             var list = await BuildShoppingListAsync(recipeIds, freeExtras);
+
+            // 🧾 Save shopping list snapshot for later normalization
+            var snapshot = new ShoppingListSnapshot
+            {
+                Id = Guid.NewGuid(),
+                MealPlanId = id,
+                JsonData = System.Text.Json.JsonSerializer.Serialize(list),
+                SourceType = "single",
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _db.ShoppingListSnapshots.Add(snapshot);
+            await _db.SaveChangesAsync();
+
             return Ok(list);
         }
 
@@ -450,5 +479,18 @@ private async Task<ShoppingListResponse> BuildShoppingListAsync(List<Guid> recip
                 }).ToList() ?? new List<MealDto>()
             };
         }
+        // ---------- Saved Shopping Lists ----------
+
+            [HttpGet("snapshots")]
+            public async Task<ActionResult<List<ShoppingListSnapshot>>> GetShoppingListSnapshots()
+            {
+                var snapshots = await _db.ShoppingListSnapshots
+                    .OrderByDescending(s => s.CreatedAt)
+                    .Take(50)
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                return Ok(snapshots);
+            }
     }
 }

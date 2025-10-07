@@ -17,7 +17,8 @@ namespace RecipeApp.Data
         public DbSet<MealPlan> MealPlans => Set<MealPlan>();
         
         public DbSet<Meal> Meals => Set<Meal>();
-        
+        public DbSet<ShoppingListSnapshot> ShoppingListSnapshots { get; set; }
+
 
 
 
