@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RecipeApp.Data;
@@ -21,14 +22,12 @@ namespace RecipeApp.Controllers
         }
 
         // ---------- Single plan ----------
-
         [HttpPost]
         [Consumes("multipart/form-data")]
         public async Task<ActionResult<MealPlanDto>> CreateMealPlan([FromForm] CreateMealPlanDto dto)
         {
             if (dto is null) return BadRequest("Invalid meal plan.");
 
-            // If caller supplied explicit meals, just persist those
             if (dto.Meals != null && dto.Meals.Count > 0)
             {
                 var planFromClient = new MealPlan
@@ -42,8 +41,7 @@ namespace RecipeApp.Controllers
                         MealType = m.MealType,
                         RecipeId = m.RecipeId,
                         FreeText = m.FreeText
-                    }).ToList(),
-                    FreeItems = new() // ensure not null
+                    }).ToList()
                 };
 
                 _db.MealPlans.Add(planFromClient);
@@ -51,17 +49,15 @@ namespace RecipeApp.Controllers
                 return Ok(ToDto(planFromClient));
             }
 
-            // Otherwise parse free text with the LLM
             var parsed = await _llm.ParseAsync(dto.FreeText ?? "");
-            var meals = await MapParsedMealsAsync(parsed);
+            var meals = await MapParsedMealsAsync(parsed ?? new LlmMealPlanParser.ParsedMealPlan());
 
             var plan = new MealPlan
             {
                 Id = Guid.NewGuid(),
                 Name = dto.Name,
                 Date = dto.Date ?? DateTime.UtcNow,
-                Meals = meals,
-                FreeItems = ExtractFreeItemsFromMeals(meals)
+                Meals = meals
             };
 
             _db.MealPlans.Add(plan);
@@ -70,8 +66,7 @@ namespace RecipeApp.Controllers
             return Ok(ToDto(plan));
         }
 
-        // ---------- Weekly plan (one MealPlan per day) ----------
-
+        // ---------- Weekly plan ----------
         public class WeeklyCreateResponse
         {
             public List<MealPlanDto> Plans { get; set; } = new();
@@ -104,41 +99,71 @@ namespace RecipeApp.Controllers
             {
                 if (string.IsNullOrWhiteSpace(text)) { offset++; continue; }
 
-                var parsed = await _llm.ParseAsync(text);
-                var meals = await MapParsedMealsAsync(parsed);
-                var freeItems = ExtractFreeItemsFromMeals(meals);
-
-                // collect for weekly shopping list
+                var parsed = await _llm.ParseAsync(text ?? "");
+                var meals = await MapParsedMealsAsync(parsed ?? new LlmMealPlanParser.ParsedMealPlan());
                 allRecipeIds.AddRange(meals.Where(m => m.RecipeId.HasValue).Select(m => m.RecipeId!.Value));
-                allFreeExtras.AddRange(freeItems);
+                allFreeExtras.AddRange(ExtractFreeItemsFromMeals(meals));
 
                 var plan = new MealPlan
                 {
                     Id = Guid.NewGuid(),
                     Name = $"{dto.Name} - {day}",
                     Date = dto.StartDate.AddDays(offset),
-                    Meals = meals,
-                    FreeItems = freeItems
+                    Meals = meals
                 };
 
                 _db.MealPlans.Add(plan);
                 createdPlans.Add(plan);
                 offset++;
             }
+            // 🧹 Normalize ingredient names (remove noise, unify casing)
+            private static string NormalizeIngredientName(string raw)
+            {
+                if (string.IsNullOrWhiteSpace(raw)) return raw;
+
+                var name = raw.Trim();
+
+                // Remove common noise words / phrases
+                var noise = new[]
+                {
+                    "portion", "portions", "bag", "packet", "leftovers", "dry weight",
+                    "serve", "served", "medium", "half", "whole", "x", "e.g.", "etc"
+                };
+                foreach (var n in noise)
+                    name = System.Text.RegularExpressions.Regex.Replace(name, $@"\b{n}\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+
+                // Remove stray punctuation
+                name = System.Text.RegularExpressions.Regex.Replace(name, @"[^\w\s\-%&']", " ").Trim();
+
+                // Collapse multiple spaces
+                name = System.Text.RegularExpressions.Regex.Replace(name, @"\s{2,}", " ").Trim();
+
+                // Title-case for consistency
+                name = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(name.ToLowerInvariant());
+
+                // Singularize simple plurals (very naive but effective for common words)
+                if (name.EndsWith("s", StringComparison.OrdinalIgnoreCase) &&
+                    !name.EndsWith("ss", StringComparison.OrdinalIgnoreCase) &&
+                    name.Length > 3)
+                {
+                    name = name[..^1];
+                }
+
+                return name;
+            }
+
 
             await _db.SaveChangesAsync();
-
-            // Build combined weekly shopping list
             var weeklyList = await BuildShoppingListAsync(allRecipeIds, allFreeExtras);
 
-            return Ok(new WeeklyCreateResponse
+            var response = new WeeklyCreateResponse
             {
                 Plans = createdPlans.Select(ToDto).ToList(),
                 ShoppingList = weeklyList
-            });
-        }
+            };
 
-        // ---------- Weekly preview (no persistence) ----------
+            return Ok(response);
+        }
 
         [HttpPost("week/preview")]
         [Consumes("multipart/form-data")]
@@ -166,9 +191,8 @@ namespace RecipeApp.Controllers
             {
                 if (string.IsNullOrWhiteSpace(text)) { offset++; continue; }
 
-                var parsed = await _llm.ParseAsync(text);
-                var meals = await MapParsedMealsAsync(parsed);
-                var freeItems = ExtractFreeItemsFromMeals(meals);
+                var parsed = await _llm.ParseAsync(text ?? "");
+                var meals = await MapParsedMealsAsync(parsed ?? new LlmMealPlanParser.ParsedMealPlan());
 
                 var plan = new MealPlan
                 {
@@ -176,12 +200,12 @@ namespace RecipeApp.Controllers
                     Name = $"{dto.Name} - {day}",
                     Date = dto.StartDate.AddDays(offset),
                     Meals = meals,
-                    FreeItems = freeItems
+                    FreeItems = ExtractFreeItemsFromMeals(meals)
                 };
 
                 allPlans.Add(plan);
                 allRecipeIds.AddRange(meals.Where(m => m.RecipeId.HasValue).Select(m => m.RecipeId!.Value));
-                allExtras.AddRange(freeItems);
+                allExtras.AddRange(plan.FreeItems);
                 offset++;
             }
 
@@ -194,8 +218,7 @@ namespace RecipeApp.Controllers
             });
         }
 
-        // ---------- Shopping list (per plan) ----------
-
+        // ---------- Shopping list ----------
         [HttpGet("{id}/shopping-list")]
         public async Task<ActionResult<ShoppingListResponse>> GetShoppingList(Guid id)
         {
@@ -217,20 +240,17 @@ namespace RecipeApp.Controllers
                 .Select(m => m.RecipeId!.Value)
                 .ToList();
 
-            var extras = mealPlan.FreeItems ?? ExtractFreeItemsFromMeals(mealPlan.Meals.ToList());
-            var list = await BuildShoppingListAsync(recipeIds, extras);
+            var freeExtras = ExtractFreeItemsFromMeals(mealPlan.Meals.ToList());
+            var list = await BuildShoppingListAsync(recipeIds, freeExtras);
             return Ok(list);
         }
 
         // ---------- Helpers ----------
-
-        /// Map LLM parsed meals into persisted Meals
         private async Task<List<Meal>> MapParsedMealsAsync(LlmMealPlanParser.ParsedMealPlan parsed)
         {
             var meals = new List<Meal>();
             if (parsed?.Meals is null) return meals;
 
-            // Preload all recipe titles
             var allRecipes = await _db.Recipes
                 .AsNoTracking()
                 .Select(r => new { r.Id, r.Title })
@@ -253,8 +273,9 @@ namespace RecipeApp.Controllers
 
                 if (pm.FreeTextItems != null && pm.FreeTextItems.Count > 0)
                 {
-                    var extras = string.Join(", ",
-                        pm.FreeTextItems.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()));
+                    var extras = string.Join(", ", pm.FreeTextItems
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .Select(s => s.Trim()));
                     if (!string.IsNullOrWhiteSpace(extras))
                         freeText = string.IsNullOrWhiteSpace(freeText) ? extras : $"{freeText}, {extras}";
                 }
@@ -271,38 +292,37 @@ namespace RecipeApp.Controllers
             return meals;
         }
 
-        /// Extracts extras from Meal.FreeText
         private static List<string> ExtractFreeItemsFromMeals(List<Meal> meals)
         {
             var extras = new List<string>();
             foreach (var m in meals)
             {
                 if (string.IsNullOrWhiteSpace(m.FreeText)) continue;
-                extras.AddRange(
-                    m.FreeText
-                        .Split(new[] { '\n', ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
-                        .Select(s => s.Trim())
-                        .Where(s => !string.IsNullOrWhiteSpace(s))
-                );
+                var parts = m.FreeText
+                    .Split(new[] { '\n', ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => s.Trim())
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .ToList();
+                extras.AddRange(parts);
             }
-            return extras.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            return extras;
         }
 
-        /// Builds a shopping list from recipe ingredients + extras
         private async Task<ShoppingListResponse> BuildShoppingListAsync(List<Guid> recipeIds, List<string> extraItems)
         {
             var rows = await _db.RecipeIngredients
                 .Include(ri => ri.Ingredient)
                 .Include(ri => ri.Unit)
                 .Where(ri => recipeIds.Contains(ri.RecipeId))
+                .AsNoTracking()
                 .ToListAsync();
 
             var grouped = new Dictionary<string, ShoppingListItemDto>(StringComparer.OrdinalIgnoreCase);
 
-            // aggregate recipe ingredients
             foreach (var ri in rows)
             {
-                var key = ri.Ingredient.Name.Trim();
+                var key = NormalizeIngredientName(ri.Ingredient.Name);
+
                 if (!grouped.TryGetValue(key, out var item))
                 {
                     item = new ShoppingListItemDto
@@ -315,24 +335,37 @@ namespace RecipeApp.Controllers
                     grouped[key] = item;
                 }
 
-                if (ri.Amount.HasValue) item.Amount = (item.Amount ?? 0) + ri.Amount.Value;
-                if (!item.SourceRecipes.Contains(ri.RecipeId)) item.SourceRecipes.Add(ri.RecipeId);
+                if (ri.Amount.HasValue)
+                    item.Amount = (item.Amount ?? 0) + (decimal)ri.Amount.Value;
+
+                if (!item.SourceRecipes.Contains(ri.RecipeId))
+                    item.SourceRecipes.Add(ri.RecipeId);
             }
 
-            // add extras
+            // Add extras
             foreach (var extra in extraItems)
             {
-                var key = extra.Trim();
-                if (string.IsNullOrWhiteSpace(key)) continue;
-                if (!grouped.ContainsKey(key))
+                if (string.IsNullOrWhiteSpace(extra)) continue;
+
+                var parsed = LlmMealPlanParser.ParseIngredientText(extra);
+                var key = NormalizeIngredientName(parsed.name);
+
+
+                if (!grouped.TryGetValue(key, out var item))
                 {
-                    grouped[key] = new ShoppingListItemDto
+                    item = new ShoppingListItemDto
                     {
-                        Ingredient = key,
-                        Amount = null,
-                        Unit = null,
+                        Ingredient = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(key.ToLowerInvariant()),
+                        Amount = parsed.qty.HasValue ? (decimal?)parsed.qty.Value : null,
+                        Unit = parsed.unit,
                         SourceRecipes = new List<Guid>()
                     };
+                    grouped[key] = item;
+                }
+                else
+                {
+                    if (parsed.qty.HasValue && (item.Unit == parsed.unit || item.Unit == null))
+                        item.Amount = (item.Amount ?? 0) + (decimal)parsed.qty.Value;
                 }
             }
 
@@ -343,13 +376,13 @@ namespace RecipeApp.Controllers
         }
 
         // ---------- DTO mapping ----------
-
         [HttpGet]
         public async Task<ActionResult<List<MealPlanDto>>> GetAll()
         {
             var plans = await _db.MealPlans
                 .Include(mp => mp.Meals)
                 .ThenInclude(m => m.Recipe)
+                .AsNoTracking()
                 .ToListAsync();
 
             return Ok(plans.Select(ToDto).ToList());
@@ -361,6 +394,7 @@ namespace RecipeApp.Controllers
             var plan = await _db.MealPlans
                 .Include(mp => mp.Meals)
                 .ThenInclude(m => m.Recipe)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(mp => mp.Id == id);
 
             if (plan == null) return NotFound();

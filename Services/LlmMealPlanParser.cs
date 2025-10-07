@@ -76,7 +76,7 @@ namespace RecipeApp.Services
                     "1) mealType should be one of: Breakfast, Lunch, Dinner, Snack, Mid-morning, Mid-afternoon (best guess).\n" +
                     "2) matchedRecipeTitle must be the exact text of a title from the KNOWN_RECIPES list if you find a clear match; otherwise null.\n" +
                     "3) If no match found but it looks like a named dish, set unmatchedMealTitle.\n" +
-                    "4) Extract extra 'freeTextItems' mentioned in that meal (e.g., '1 portion of fruit', 'whey protein shake').\n" +
+                    "4) Extract ALL standalone food items, ingredients, or snacks as freeTextItems — even if they appear inside a larger meal description (e.g. 'banana', 'protein bar', '1 tbsp honey').\n" +
                     "5) No markdown, no commentary, return ONLY JSON."
                 ),
                 ChatMessage.CreateUserMessage($"KNOWN_RECIPES:\n{knownTitles}\n\nMEAL_PLAN_TEXT:\n{freeText}")
