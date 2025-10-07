@@ -1,11 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using RecipeApp.Data;
+using RecipeApp.Dtos;
+using RecipeApp.Models;
 using OpenAI;
 using OpenAI.Chat;
-using RecipeApp.Dtos;
-using RecipeApp.Data;
-using RecipeApp.Models;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace RecipeApp.Controllers
 {
@@ -13,22 +13,36 @@ namespace RecipeApp.Controllers
     [Route("api/[controller]")]
     public class IngestionController : ControllerBase
     {
-        private readonly OpenAIClient _client;
         private readonly AppDb _db;
+        private readonly OpenAIClient _openAI;
 
-        public IngestionController(IConfiguration config, AppDb db)
+        public IngestionController(AppDb db, OpenAIClient openAI)
         {
-            var apiKey = config["OpenAI:ApiKey"];
-            _client = new OpenAIClient(apiKey);
             _db = db;
+            _openAI = openAI;
         }
 
+        private static (decimal? amount, string? unit) ParseQuantity(string? quantity)
+        {
+            if (string.IsNullOrWhiteSpace(quantity)) return (null, null);
+            var parts = quantity.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) return (null, null);
+
+            if (decimal.TryParse(parts[0], out var amount))
+            {
+                var unit = parts.Length > 1 ? parts[1] : null;
+                return (amount, unit);
+            }
+
+            return (null, quantity);
+        }
+
+        // ✅ SINGLE IMAGE UPLOAD
         [HttpPost("upload")]
         [Consumes("multipart/form-data")]
-        public async Task<IActionResult> Upload([FromForm] UploadRecipeImageDto request)
+        public async Task<IActionResult> Upload([FromForm] IFormFile file)
         {
-            var file = request.File;
-            if (file is null || file.Length == 0)
+            if (file == null || file.Length == 0)
                 return BadRequest("No file uploaded.");
 
             var tempPath = Path.GetTempFileName();
@@ -39,10 +53,8 @@ namespace RecipeApp.Controllers
 
             try
             {
-                // Read file bytes directly
                 var bytes = await System.IO.File.ReadAllBytesAsync(tempPath);
-
-                var chatClient = _client.GetChatClient("gpt-4.1-mini");
+                var chatClient = _openAI.GetChatClient("gpt-4.1-mini");
 
                 var response = await chatClient.CompleteChatAsync(new[]
                 {
@@ -52,13 +64,11 @@ namespace RecipeApp.Controllers
                             "Extract the recipe name, servings, and ingredients as structured JSON. " +
                             "Use this schema: { title: string, servings: number, ingredients: [ { name: string, quantity: string } ] }"
                         ),
-                        ChatMessageContentPart.CreateImagePart(new BinaryData(bytes), "image/png")
+                        ChatMessageContentPart.CreateImagePart(new BinaryData(bytes), file.ContentType)
                     })
                 });
 
-                var content = response.Value.Content[0].Text;
-
-                // Clean JSON response
+                var content = response.Value.Content[0].Text ?? "";
                 var json = content.Replace("```json", "").Replace("```", "");
 
                 var extracted = JsonSerializer.Deserialize<ExtractRecipeDto>(
@@ -67,9 +77,8 @@ namespace RecipeApp.Controllers
                 );
 
                 if (extracted == null)
-                    return BadRequest("Could not parse recipe from AI output.");
+                    return BadRequest("Failed to parse recipe content.");
 
-                // Map DTO -> Entities
                 var recipe = new Recipe
                 {
                     Id = Guid.NewGuid(),
@@ -80,61 +89,55 @@ namespace RecipeApp.Controllers
 
                 foreach (var i in extracted.Ingredients)
                 {
-                    // Parse quantity string into amount + unit
-                    decimal? amount = null;
-                    string? unitStr = null;
+                    (decimal? amount, string? unitStr) = ParseQuantity(i.Quantity);
+                    Unit? unit = null;
 
-                    if (!string.IsNullOrWhiteSpace(i.Quantity))
+                    if (!string.IsNullOrWhiteSpace(unitStr))
+                        unit = await _db.Units.FirstOrDefaultAsync(u => u.Code == unitStr);
+
+                    var ingredient = await _db.Ingredients
+                        .FirstOrDefaultAsync(x => x.Name.ToLower() == i.Name.ToLower());
+
+                    if (ingredient == null)
                     {
-                        (amount, unitStr) = ParseQuantity(i.Quantity);
+                        ingredient = new Ingredient
+                        {
+                            Id = Guid.NewGuid(),
+                            Name = i.Name
+                        };
+                        _db.Ingredients.Add(ingredient);
                     }
 
-                    Unit? unitEntity = null;
-                    if (!string.IsNullOrWhiteSpace(unitStr))
-                        unitEntity = _db.Units.FirstOrDefault(u => u.Code == unitStr);
-
-                    var ingredient = new Ingredient
-                    {
-                        Id = Guid.NewGuid(),
-                        Name = i.Name
-                    };
-
-                    var recipeIngredient = new RecipeIngredient
+                    recipe.RecipeIngredients.Add(new RecipeIngredient
                     {
                         Id = Guid.NewGuid(),
                         RecipeId = recipe.Id,
                         Ingredient = ingredient,
                         Amount = amount,
-                        Unit = unitEntity,
-                        Notes = i.Notes ?? i.Quantity
-                    };
-
-                    recipe.RecipeIngredients.Add(recipeIngredient);
+                        Unit = unit,
+                        Notes = i.Quantity
+                    });
                 }
 
                 _db.Recipes.Add(recipe);
-                    await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync();
 
-                    // Project to DTO to avoid EF Core cycles
-                    var recipeDto = new RecipeResponseDto
+                return Ok(new
+                {
+                    recipe.Title,
+                    recipe.Servings,
+                    Ingredients = recipe.RecipeIngredients.Select(ri => new
                     {
-                        RecipeId = recipe.Id,
-                        Title = recipe.Title,
-                        Servings = recipe.Servings,
-                        Ingredients = recipe.RecipeIngredients.Select(ri => new RecipeIngredientResponseDto
-                        {
-                            Ingredient = ri.Ingredient.Name,
-                            Amount = ri.Amount,
-                            Unit = ri.Unit?.Code,
-                            Notes = ri.Notes
-                        }).ToList()
-                    };
-
-                    return Ok(new { recipe = recipeDto, aiRaw = content });
+                        ri.Ingredient.Name,
+                        ri.Amount,
+                        Unit = ri.Unit?.Code,
+                        ri.Notes
+                    })
+                });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = "OCR failed", details = ex.ToString() });
+                return StatusCode(500, new { error = ex.Message });
             }
             finally
             {
@@ -142,44 +145,120 @@ namespace RecipeApp.Controllers
             }
         }
 
-        /// <summary>
-        /// Very simple parser: splits a string like "120ml" or "1/2 tsp"
-        /// into numeric amount and unit string.
-        /// </summary>
-        private (decimal?, string?) ParseQuantity(string quantity)
+        // ✅ MULTI IMAGE UPLOAD (Batch)
+        [HttpPost("upload/batch")]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> UploadBatch([FromForm] List<IFormFile> files)
         {
-            if (string.IsNullOrWhiteSpace(quantity))
-                return (null, null);
+            if (files == null || files.Count == 0)
+                return BadRequest("No files uploaded.");
 
-            // Match "number+unit" e.g. "120ml", "1/2 tsp"
-            var match = Regex.Match(quantity.Trim(), @"^([\d\/\.]+)\s*([a-zA-Z]+)?");
+            var chatClient = _openAI.GetChatClient("gpt-4.1-mini");
+            var createdRecipes = new List<object>();
 
-            if (!match.Success)
-                return (null, quantity); // fallback to notes
-
-            decimal? amount = null;
-            var numPart = match.Groups[1].Value;
-
-            // Handle fractions like "1/2"
-            if (numPart.Contains('/'))
+            foreach (var file in files)
             {
-                var parts = numPart.Split('/');
-                if (parts.Length == 2 &&
-                    decimal.TryParse(parts[0], out var numerator) &&
-                    decimal.TryParse(parts[1], out var denominator) &&
-                    denominator != 0)
+                if (file.Length == 0) continue;
+
+                var tempPath = Path.GetTempFileName();
+                await using (var stream = System.IO.File.Create(tempPath))
                 {
-                    amount = numerator / denominator;
+                    await file.CopyToAsync(stream);
+                }
+
+                try
+                {
+                    var bytes = await System.IO.File.ReadAllBytesAsync(tempPath);
+
+                    var response = await chatClient.CompleteChatAsync(new[]
+                    {
+                        ChatMessage.CreateUserMessage(new ChatMessageContentPart[]
+                        {
+                            ChatMessageContentPart.CreateTextPart(
+                                "Extract the recipe name, servings, and ingredients as structured JSON. " +
+                                "Use this schema: { title: string, servings: number, ingredients: [ { name: string, quantity: string } ] }"
+                            ),
+                            ChatMessageContentPart.CreateImagePart(new BinaryData(bytes), file.ContentType)
+                        })
+                    });
+
+                    var content = response.Value.Content[0].Text ?? "";
+                    var json = content.Replace("```json", "").Replace("```", "");
+
+                    var extracted = JsonSerializer.Deserialize<ExtractRecipeDto>(
+                        json,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                    );
+
+                    if (extracted == null) continue;
+
+                    var recipe = new Recipe
+                    {
+                        Id = Guid.NewGuid(),
+                        Title = extracted.Title,
+                        Servings = extracted.Servings,
+                        RecipeIngredients = new List<RecipeIngredient>()
+                    };
+
+                    foreach (var i in extracted.Ingredients)
+                    {
+                        (decimal? amount, string? unitStr) = ParseQuantity(i.Quantity);
+                        Unit? unit = null;
+
+                        if (!string.IsNullOrWhiteSpace(unitStr))
+                            unit = await _db.Units.FirstOrDefaultAsync(u => u.Code == unitStr);
+
+                        var ingredient = await _db.Ingredients
+                            .FirstOrDefaultAsync(x => x.Name.ToLower() == i.Name.ToLower());
+
+                        if (ingredient == null)
+                        {
+                            ingredient = new Ingredient
+                            {
+                                Id = Guid.NewGuid(),
+                                Name = i.Name
+                            };
+                            _db.Ingredients.Add(ingredient);
+                        }
+
+                        recipe.RecipeIngredients.Add(new RecipeIngredient
+                        {
+                            Id = Guid.NewGuid(),
+                            RecipeId = recipe.Id,
+                            Ingredient = ingredient,
+                            Amount = amount,
+                            Unit = unit,
+                            Notes = i.Quantity
+                        });
+                    }
+
+                    _db.Recipes.Add(recipe);
+
+                    createdRecipes.Add(new
+                    {
+                        recipe.Title,
+                        recipe.Servings,
+                        Ingredients = recipe.RecipeIngredients.Select(ri => new
+                        {
+                            ri.Ingredient.Name,
+                            ri.Amount,
+                            Unit = ri.Unit?.Code,
+                            ri.Notes
+                        })
+                    });
+                }
+                catch (Exception ex)
+                {
+                    createdRecipes.Add(new { error = $"Failed to parse {file.FileName}", details = ex.Message });
+                }
+                finally
+                {
+                    try { System.IO.File.Delete(tempPath); } catch { }
                 }
             }
-            else if (decimal.TryParse(numPart, out var parsed))
-            {
-                amount = parsed;
-            }
 
-            var unit = match.Groups[2].Success ? match.Groups[2].Value : null;
-
-            return (amount, unit);
+            await _db.SaveChangesAsync();
+            return Ok(new { recipes = createdRecipes });
         }
     }
 }
