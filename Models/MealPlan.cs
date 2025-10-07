@@ -1,15 +1,22 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace RecipeApp.Models
 {
     public class MealPlan
     {
+        [Key]
         public Guid Id { get; set; }
         public string Name { get; set; } = string.Empty;  // e.g. "Week 1 Day 1"
         public DateTime? Date { get; set; }
 
         public ICollection<Meal> Meals { get; set; } = new List<Meal>();
+
+        // 🆕 new field
+        [Column(TypeName = "jsonb")]           // works with Postgres; if SQLite, just remove attribute
+        public List<string> FreeItems { get; set; } = new();
     }
 
     public class Meal
