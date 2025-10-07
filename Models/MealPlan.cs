@@ -16,7 +16,8 @@ namespace RecipeApp.Models
 
         // 🆕 new field
         [Column(TypeName = "jsonb")]           // works with Postgres; if SQLite, just remove attribute
-        public List<string> FreeItems { get; set; } = new();
+        public List<string>? FreeItems { get; set; } = new();
+
     }
 
     public class Meal

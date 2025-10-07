@@ -138,6 +138,60 @@ namespace RecipeApp.Controllers
             // return Ok(createdPlans.Select(ToDto).ToList());
         }
 
+[HttpPost("week/preview")]
+[Consumes("multipart/form-data")]
+public async Task<ActionResult<WeeklyCreateResponse>> PreviewWeeklyMealPlan([FromForm] CreateWeeklyMealPlanDto dto)
+{
+    if (dto is null) return BadRequest("Invalid weekly plan.");
+
+    var weekText = new (string Day, string? Text)[] {
+        ("Monday", dto.Monday),
+        ("Tuesday", dto.Tuesday),
+        ("Wednesday", dto.Wednesday),
+        ("Thursday", dto.Thursday),
+        ("Friday", dto.Friday),
+        ("Saturday", dto.Saturday),
+        ("Sunday", dto.Sunday)
+    };
+
+    var allPlans = new List<MealPlan>();
+    var allRecipeIds = new List<Guid>();
+    var allExtras = new List<string>();
+
+    int offset = 0;
+    foreach (var (day, text) in weekText)
+    {
+        if (string.IsNullOrWhiteSpace(text)) { offset++; continue; }
+
+        var parsed = await _llm.ParseAsync(text);
+        var meals = await MapParsedMealsAsync(parsed);
+
+        var plan = new MealPlan
+        {
+            Id = Guid.NewGuid(),
+            Name = $"{dto.Name} - {day}",
+            Date = dto.StartDate.AddDays(offset),
+            Meals = meals,
+            FreeItems = ExtractFreeItemsFromMeals(meals)
+        };
+
+            allPlans.Add(plan);
+            allRecipeIds.AddRange(meals.Where(m => m.RecipeId.HasValue).Select(m => m.RecipeId!.Value));
+            allExtras.AddRange(plan.FreeItems);
+            offset++;
+            }
+
+            var shopping = await BuildShoppingListAsync(allRecipeIds, allExtras);
+
+            return Ok(new WeeklyCreateResponse
+            {
+                Plans = allPlans.Select(ToDto).ToList(),
+                ShoppingList = shopping
+            });
+        }
+
+        
+
         // ---------- Shopping list (per plan) ----------
 
         [HttpGet("{id}/shopping-list")]

@@ -19,18 +19,36 @@ namespace RecipeApp.Services
             _oa = new OpenAIClient(apiKey);
         }
 
-        public class ParsedMealPlan
+        // -------------------- Helper Regex for quantities --------------------
+
+        // 🔹 Regex to capture "100g chicken", "2 x eggs", "1 cup oats", etc.
+        private static readonly Regex _quantityRegex =
+            new(@"(?:(?<qty>\d+(?:\.\d+)?)\s*(?<unit>g|kg|ml|l|tbsp|tsp|cup|cups|slice|slices|x)?\s*)?(?<name>[A-Za-z][A-Za-z\s\-]+)",
+                RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        /// <summary>
+        /// Extracts (name, quantity, unit) from a single free-text ingredient line.
+        /// Returns nulls when no numeric data present.
+        /// </summary>
+        public static (string name, float? qty, string? unit) ParseIngredientText(string raw)
         {
-            public List<ParsedMeal> Meals { get; set; } = new();
+            if (string.IsNullOrWhiteSpace(raw))
+                return (string.Empty, null, null);
+
+            var m = _quantityRegex.Match(raw.Trim());
+            if (!m.Success) return (raw.Trim(), null, null);
+
+            float? qty = null;
+            if (float.TryParse(m.Groups["qty"].Value, out var q))
+                qty = q;
+
+            var unit = m.Groups["unit"].Value;
+            var name = m.Groups["name"].Value.Trim();
+
+            return (name, qty, string.IsNullOrWhiteSpace(unit) ? null : unit);
         }
 
-        public class ParsedMeal
-        {
-            public string MealType { get; set; } = "Meal";
-            public string? MatchedRecipeTitle { get; set; }
-            public string? UnmatchedMealTitle { get; set; }
-            public List<string> FreeTextItems { get; set; } = new();
-        }
+        // -------------------- Main LLM Parsing Logic --------------------
 
         public async Task<ParsedMealPlan> ParseAsync(string freeText, CancellationToken ct = default)
         {
@@ -49,7 +67,6 @@ namespace RecipeApp.Services
 
             var chatClient = _oa.GetChatClient("gpt-4.1-mini");
 
-            // ✅ FIXED — use List<ChatMessage>
             var messages = new List<ChatMessage>
             {
                 ChatMessage.CreateSystemMessage(
@@ -65,19 +82,44 @@ namespace RecipeApp.Services
                 ChatMessage.CreateUserMessage($"KNOWN_RECIPES:\n{knownTitles}\n\nMEAL_PLAN_TEXT:\n{freeText}")
             };
 
-            // ✅ FIXED — pass IEnumerable<ChatMessage>
             var resp = await chatClient.CompleteChatAsync(messages);
 
             var json = resp.Value.Content[0].Text ?? "";
-
             json = Regex.Replace(json, @"^```json\s*|\s*```$", "", RegexOptions.Multiline);
 
             var parsed = JsonSerializer.Deserialize<ParsedMealPlan>(json, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
+            
+            if (parsed?.Meals != null)
+            {
+                foreach (var meal in parsed.Meals)
+                {
+                    foreach (var item in meal.FreeTextItems)
+                        meal.ParsedFreeItemsDetailed.Add(ParseIngredientText(item));
+                }
+            }
 
             return parsed ?? result;
+        }
+
+        // -------------------- Data Structures --------------------
+
+        public class ParsedMealPlan
+        {
+            public List<ParsedMeal> Meals { get; set; } = new();
+        }
+
+        public class ParsedMeal
+        {
+            public string MealType { get; set; } = "Meal";
+            public string? MatchedRecipeTitle { get; set; }
+            public string? UnmatchedMealTitle { get; set; }
+            public List<string> FreeTextItems { get; set; } = new();
+
+            // 🆕 Structured version of FreeTextItems
+            public List<(string name, float? qty, string? unit)> ParsedFreeItemsDetailed { get; set; } = new();
         }
     }
 }
