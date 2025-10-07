@@ -14,11 +14,13 @@ namespace RecipeApp.Controllers
     {
         private readonly AppDb _db;
         private readonly LlmMealPlanParser _llm;
+        private readonly LlmIngredientNormalizer _normalizer;
 
-        public MealPlanController(AppDb db, LlmMealPlanParser llm)
+        public MealPlanController(AppDb db, LlmMealPlanParser llm, LlmIngredientNormalizer normalizer)
         {
             _db = db;
             _llm = llm;
+            _normalizer = normalizer;
         }
 
         // ---------- Single plan ----------
@@ -116,42 +118,6 @@ namespace RecipeApp.Controllers
                 createdPlans.Add(plan);
                 offset++;
             }
-            // 🧹 Normalize ingredient names (remove noise, unify casing)
-            private static string NormalizeIngredientName(string raw)
-            {
-                if (string.IsNullOrWhiteSpace(raw)) return raw;
-
-                var name = raw.Trim();
-
-                // Remove common noise words / phrases
-                var noise = new[]
-                {
-                    "portion", "portions", "bag", "packet", "leftovers", "dry weight",
-                    "serve", "served", "medium", "half", "whole", "x", "e.g.", "etc"
-                };
-                foreach (var n in noise)
-                    name = System.Text.RegularExpressions.Regex.Replace(name, $@"\b{n}\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
-
-                // Remove stray punctuation
-                name = System.Text.RegularExpressions.Regex.Replace(name, @"[^\w\s\-%&']", " ").Trim();
-
-                // Collapse multiple spaces
-                name = System.Text.RegularExpressions.Regex.Replace(name, @"\s{2,}", " ").Trim();
-
-                // Title-case for consistency
-                name = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(name.ToLowerInvariant());
-
-                // Singularize simple plurals (very naive but effective for common words)
-                if (name.EndsWith("s", StringComparison.OrdinalIgnoreCase) &&
-                    !name.EndsWith("ss", StringComparison.OrdinalIgnoreCase) &&
-                    name.Length > 3)
-                {
-                    name = name[..^1];
-                }
-
-                return name;
-            }
-
 
             await _db.SaveChangesAsync();
             var weeklyList = await BuildShoppingListAsync(allRecipeIds, allFreeExtras);
@@ -308,6 +274,54 @@ namespace RecipeApp.Controllers
             return extras;
         }
 
+        // ---------- Ingredient Normalisation ----------
+        private static string NormalizeIngredientName(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return raw;
+            var name = raw.Trim();
+
+            var noise = new[]
+            {
+                "portion", "portions", "bag", "packet", "leftovers", "dry weight",
+                "serve", "served", "medium", "half", "whole", "x", "e.g.", "etc",
+                "from", "of", "a", "the"
+            };
+            foreach (var n in noise)
+                name = System.Text.RegularExpressions.Regex.Replace(name, $@"\b{n}\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+
+            name = System.Text.RegularExpressions.Regex.Replace(name, @"[^\w\s%&'/-]", " ").Trim();
+            name = System.Text.RegularExpressions.Regex.Replace(name, @"\s{2,}", " ").Trim();
+
+            var irregulars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "tomatoes", "tomato" },
+                { "berries", "berry" },
+                { "leaves", "leaf" },
+                { "potatoes", "potato" },
+                { "chopped", "" },
+                { "beaten", "" },
+                { "sliced", "" },
+                { "cooked", "" },
+                { "bread", "wholemeal bread" }
+            };
+
+            foreach (var kvp in irregulars)
+                if (name.EndsWith(kvp.Key, StringComparison.OrdinalIgnoreCase))
+                    name = name[..^kvp.Key.Length] + kvp.Value;
+
+            if (name.EndsWith("s", StringComparison.OrdinalIgnoreCase) &&
+                !name.EndsWith("ss", StringComparison.OrdinalIgnoreCase) &&
+                name.Length > 3)
+            {
+                name = name[..^1];
+            }
+
+            name = name.Trim('-', '_', ' ', '.', ',');
+            name = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(name.ToLowerInvariant());
+
+            return name;
+        }
+
         private async Task<ShoppingListResponse> BuildShoppingListAsync(List<Guid> recipeIds, List<string> extraItems)
         {
             var rows = await _db.RecipeIngredients
@@ -342,14 +356,11 @@ namespace RecipeApp.Controllers
                     item.SourceRecipes.Add(ri.RecipeId);
             }
 
-            // Add extras
             foreach (var extra in extraItems)
             {
                 if (string.IsNullOrWhiteSpace(extra)) continue;
-
                 var parsed = LlmMealPlanParser.ParseIngredientText(extra);
                 var key = NormalizeIngredientName(parsed.name);
-
 
                 if (!grouped.TryGetValue(key, out var item))
                 {
@@ -367,6 +378,14 @@ namespace RecipeApp.Controllers
                     if (parsed.qty.HasValue && (item.Unit == parsed.unit || item.Unit == null))
                         item.Amount = (item.Amount ?? 0) + (decimal)parsed.qty.Value;
                 }
+            }
+
+            // 🧠 Post-process with LLM to unify and clean names
+            var mapping = await _normalizer.NormalizeAsync(grouped.Keys);
+            foreach (var kvp in mapping)
+            {
+                if (grouped.TryGetValue(kvp.Key, out var item))
+                    item.Ingredient = kvp.Value;
             }
 
             return new ShoppingListResponse

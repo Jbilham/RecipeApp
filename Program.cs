@@ -17,6 +17,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<LlmMealPlanParser>();
+builder.Services.AddScoped<LlmIngredientNormalizer>();
 
 var apiKey = builder.Configuration["OpenAI:ApiKey"];
 Console.WriteLine($"[CONFIG] OpenAI:ApiKey {(string.IsNullOrEmpty(apiKey) ? "NOT FOUND" : "FOUND")} ({apiKey?.Length ?? 0} chars)");
