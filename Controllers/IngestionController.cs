@@ -37,13 +37,15 @@ namespace RecipeApp.Controllers
             return (null, quantity);
         }
 
-        // ✅ SINGLE IMAGE UPLOAD
-        [HttpPost("upload")]
-        [Consumes("multipart/form-data")]
-        public async Task<IActionResult> Upload([FromForm] IFormFile file)
-        {
+ // ✅ SINGLE IMAGE UPLOAD
+          [HttpPost("upload")]
+            [Consumes("multipart/form-data")]
+            public async Task<IActionResult> Upload([FromForm] UploadRecipeImageDto dto)
+            {
+            var file = dto.Files.FirstOrDefault();
             if (file == null || file.Length == 0)
-                return BadRequest("No file uploaded.");
+                    return BadRequest("No file uploaded.");
+
 
             var tempPath = Path.GetTempFileName();
             await using (var stream = System.IO.File.Create(tempPath))
@@ -145,15 +147,15 @@ namespace RecipeApp.Controllers
             }
         }
 
-        // ✅ MULTI IMAGE UPLOAD (Batch)
-        [HttpPost("upload/batch")]
-        [Consumes("multipart/form-data")]
-        public async Task<IActionResult> UploadBatch([FromForm] List<IFormFile> files)
-        {
-            if (files == null || files.Count == 0)
-                return BadRequest("No files uploaded.");
-
-            var chatClient = _openAI.GetChatClient("gpt-4.1-mini");
+// ✅ MULTI IMAGE UPLOAD (Batch)
+            [HttpPost("upload/batch")]
+            [Consumes("multipart/form-data")]
+            public async Task<IActionResult> UploadBatch([FromForm] UploadRecipeImageDto dto)
+            {
+                var files = dto.Files;
+                if (files == null || files.Count == 0)
+                    return BadRequest("No files uploaded.");     var chatClient = _openAI.GetChatClient("gpt-4.1-mini");
+            
             var createdRecipes = new List<object>();
 
             foreach (var file in files)

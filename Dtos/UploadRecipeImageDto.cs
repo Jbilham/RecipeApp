@@ -1,10 +1,10 @@
-
-
 namespace RecipeApp.Dtos
 {
     public class UploadRecipeImageDto
     {
-        public IFormFile File { get; set; } = default!;
+        /// <summary>
+        /// One or more recipe image files.
+        /// </summary>
+        public List<IFormFile> Files { get; set; } = new();
     }
 }
-
