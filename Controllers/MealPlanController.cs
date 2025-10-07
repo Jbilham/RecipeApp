@@ -321,78 +321,91 @@ namespace RecipeApp.Controllers
 
             return name;
         }
+private async Task<ShoppingListResponse> BuildShoppingListAsync(List<Guid> recipeIds, List<string> extraItems)
+{
+    var rows = await _db.RecipeIngredients
+        .Include(ri => ri.Ingredient)
+        .Include(ri => ri.Unit)
+        .Where(ri => recipeIds.Contains(ri.RecipeId))
+        .AsNoTracking()
+        .ToListAsync();
 
-        private async Task<ShoppingListResponse> BuildShoppingListAsync(List<Guid> recipeIds, List<string> extraItems)
+    var grouped = new Dictionary<string, ShoppingListItemDto>(StringComparer.OrdinalIgnoreCase);
+
+    // 🧩 Add recipe ingredients
+    foreach (var ri in rows)
+    {
+        var key = NormalizeIngredientName(ri.Ingredient.Name);
+        if (!grouped.TryGetValue(key, out var item))
         {
-            var rows = await _db.RecipeIngredients
-                .Include(ri => ri.Ingredient)
-                .Include(ri => ri.Unit)
-                .Where(ri => recipeIds.Contains(ri.RecipeId))
-                .AsNoTracking()
-                .ToListAsync();
-
-            var grouped = new Dictionary<string, ShoppingListItemDto>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var ri in rows)
+            item = new ShoppingListItemDto
             {
-                var key = NormalizeIngredientName(ri.Ingredient.Name);
-
-                if (!grouped.TryGetValue(key, out var item))
-                {
-                    item = new ShoppingListItemDto
-                    {
-                        Ingredient = key,
-                        Amount = 0,
-                        Unit = ri.Unit?.Code,
-                        SourceRecipes = new List<Guid>()
-                    };
-                    grouped[key] = item;
-                }
-
-                if (ri.Amount.HasValue)
-                    item.Amount = (item.Amount ?? 0) + (decimal)ri.Amount.Value;
-
-                if (!item.SourceRecipes.Contains(ri.RecipeId))
-                    item.SourceRecipes.Add(ri.RecipeId);
-            }
-
-            foreach (var extra in extraItems)
-            {
-                if (string.IsNullOrWhiteSpace(extra)) continue;
-                var parsed = LlmMealPlanParser.ParseIngredientText(extra);
-                var key = NormalizeIngredientName(parsed.name);
-
-                if (!grouped.TryGetValue(key, out var item))
-                {
-                    item = new ShoppingListItemDto
-                    {
-                        Ingredient = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(key.ToLowerInvariant()),
-                        Amount = parsed.qty.HasValue ? (decimal?)parsed.qty.Value : null,
-                        Unit = parsed.unit,
-                        SourceRecipes = new List<Guid>()
-                    };
-                    grouped[key] = item;
-                }
-                else
-                {
-                    if (parsed.qty.HasValue && (item.Unit == parsed.unit || item.Unit == null))
-                        item.Amount = (item.Amount ?? 0) + (decimal)parsed.qty.Value;
-                }
-            }
-
-            // 🧠 Post-process with LLM to unify and clean names
-            var mapping = await _normalizer.NormalizeAsync(grouped.Keys);
-            foreach (var kvp in mapping)
-            {
-                if (grouped.TryGetValue(kvp.Key, out var item))
-                    item.Ingredient = kvp.Value;
-            }
-
-            return new ShoppingListResponse
-            {
-                Items = grouped.Values.OrderBy(i => i.Ingredient).ToList()
+                Ingredient = key,
+                Amount = 0,
+                Unit = ri.Unit?.Code,
+                SourceRecipes = new List<Guid>()
             };
+            grouped[key] = item;
         }
+
+        if (ri.Amount.HasValue)
+            item.Amount = (item.Amount ?? 0) + (decimal)ri.Amount.Value;
+
+        if (!item.SourceRecipes.Contains(ri.RecipeId))
+            item.SourceRecipes.Add(ri.RecipeId);
+    }
+
+    // 🧩 Add free-text extras
+    foreach (var extra in extraItems)
+    {
+        if (string.IsNullOrWhiteSpace(extra)) continue;
+
+        var parsed = LlmMealPlanParser.ParseIngredientText(extra);
+        var key = NormalizeIngredientName(parsed.name);
+
+        if (!grouped.TryGetValue(key, out var item))
+        {
+            item = new ShoppingListItemDto
+            {
+                Ingredient = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(key.ToLowerInvariant()),
+                Amount = parsed.qty.HasValue ? (decimal?)parsed.qty.Value : null,
+                Unit = parsed.unit,
+                SourceRecipes = new List<Guid>()
+            };
+            grouped[key] = item;
+        }
+        else
+        {
+            if (parsed.qty.HasValue && (item.Unit == parsed.unit || item.Unit == null))
+                item.Amount = (item.Amount ?? 0) + (decimal)parsed.qty.Value;
+        }
+    }
+
+    // 🧠 Normalize ingredient names with LLM
+    var mapping = await _normalizer.NormalizeAsync(grouped.Keys);
+    foreach (var kvp in mapping)
+    {
+        if (grouped.TryGetValue(kvp.Key, out var item))
+            item.Ingredient = kvp.Value;
+    }
+
+    // 🧹 Remove blanks + merge duplicates
+    var cleaned = grouped.Values
+        .Where(i => !string.IsNullOrWhiteSpace(i.Ingredient))
+        .GroupBy(i => i.Ingredient.Trim(), StringComparer.OrdinalIgnoreCase)
+        .Select(g =>
+        {
+            var first = g.First();
+            first.Amount = g.Sum(x => x.Amount ?? 0);
+            first.SourceRecipes = g.SelectMany(x => x.SourceRecipes).Distinct().ToList();
+            return first;
+        })
+        .OrderBy(i => i.Ingredient)
+        .ToList();
+
+    return new ShoppingListResponse { Items = cleaned };
+}
+
 
         // ---------- DTO mapping ----------
         [HttpGet]
