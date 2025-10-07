@@ -28,7 +28,7 @@ namespace RecipeApp.Controllers
         {
             if (dto is null) return BadRequest("Invalid meal plan.");
 
-            // If caller supplied explicit meals, just persist those.
+            // If caller supplied explicit meals, just persist those
             if (dto.Meals != null && dto.Meals.Count > 0)
             {
                 var planFromClient = new MealPlan
@@ -42,7 +42,8 @@ namespace RecipeApp.Controllers
                         MealType = m.MealType,
                         RecipeId = m.RecipeId,
                         FreeText = m.FreeText
-                    }).ToList()
+                    }).ToList(),
+                    FreeItems = new() // ensure not null
                 };
 
                 _db.MealPlans.Add(planFromClient);
@@ -50,7 +51,7 @@ namespace RecipeApp.Controllers
                 return Ok(ToDto(planFromClient));
             }
 
-            // Otherwise parse the free text with the LLM
+            // Otherwise parse free text with the LLM
             var parsed = await _llm.ParseAsync(dto.FreeText ?? "");
             var meals = await MapParsedMealsAsync(parsed);
 
@@ -59,7 +60,8 @@ namespace RecipeApp.Controllers
                 Id = Guid.NewGuid(),
                 Name = dto.Name,
                 Date = dto.Date ?? DateTime.UtcNow,
-                Meals = meals
+                Meals = meals,
+                FreeItems = ExtractFreeItemsFromMeals(meals)
             };
 
             _db.MealPlans.Add(plan);
@@ -82,7 +84,8 @@ namespace RecipeApp.Controllers
         {
             if (dto is null) return BadRequest("Invalid weekly plan.");
 
-            var weekText = new (string Day, string? Text)[] {
+            var weekText = new (string Day, string? Text)[]
+            {
                 ("Monday", dto.Monday),
                 ("Tuesday", dto.Tuesday),
                 ("Wednesday", dto.Wednesday),
@@ -103,17 +106,19 @@ namespace RecipeApp.Controllers
 
                 var parsed = await _llm.ParseAsync(text);
                 var meals = await MapParsedMealsAsync(parsed);
+                var freeItems = ExtractFreeItemsFromMeals(meals);
 
-                // collect for weekly shopping list (recipe ingredients + extra free items)
+                // collect for weekly shopping list
                 allRecipeIds.AddRange(meals.Where(m => m.RecipeId.HasValue).Select(m => m.RecipeId!.Value));
-                allFreeExtras.AddRange(ExtractFreeItemsFromMeals(meals)); // picked up from FreeText we add below
+                allFreeExtras.AddRange(freeItems);
 
                 var plan = new MealPlan
                 {
                     Id = Guid.NewGuid(),
                     Name = $"{dto.Name} - {day}",
                     Date = dto.StartDate.AddDays(offset),
-                    Meals = meals
+                    Meals = meals,
+                    FreeItems = freeItems
                 };
 
                 _db.MealPlans.Add(plan);
@@ -123,62 +128,61 @@ namespace RecipeApp.Controllers
 
             await _db.SaveChangesAsync();
 
-            // Build a single combined shopping list for the week
+            // Build combined weekly shopping list
             var weeklyList = await BuildShoppingListAsync(allRecipeIds, allFreeExtras);
 
-            var response = new WeeklyCreateResponse
+            return Ok(new WeeklyCreateResponse
             {
                 Plans = createdPlans.Select(ToDto).ToList(),
                 ShoppingList = weeklyList
-            };
-
-            return Ok(response);
-
-            // If you need to preserve old return shape (list only), use:
-            // return Ok(createdPlans.Select(ToDto).ToList());
+            });
         }
 
-[HttpPost("week/preview")]
-[Consumes("multipart/form-data")]
-public async Task<ActionResult<WeeklyCreateResponse>> PreviewWeeklyMealPlan([FromForm] CreateWeeklyMealPlanDto dto)
-{
-    if (dto is null) return BadRequest("Invalid weekly plan.");
+        // ---------- Weekly preview (no persistence) ----------
 
-    var weekText = new (string Day, string? Text)[] {
-        ("Monday", dto.Monday),
-        ("Tuesday", dto.Tuesday),
-        ("Wednesday", dto.Wednesday),
-        ("Thursday", dto.Thursday),
-        ("Friday", dto.Friday),
-        ("Saturday", dto.Saturday),
-        ("Sunday", dto.Sunday)
-    };
-
-    var allPlans = new List<MealPlan>();
-    var allRecipeIds = new List<Guid>();
-    var allExtras = new List<string>();
-
-    int offset = 0;
-    foreach (var (day, text) in weekText)
-    {
-        if (string.IsNullOrWhiteSpace(text)) { offset++; continue; }
-
-        var parsed = await _llm.ParseAsync(text);
-        var meals = await MapParsedMealsAsync(parsed);
-
-        var plan = new MealPlan
+        [HttpPost("week/preview")]
+        [Consumes("multipart/form-data")]
+        public async Task<ActionResult<WeeklyCreateResponse>> PreviewWeeklyMealPlan([FromForm] CreateWeeklyMealPlanDto dto)
         {
-            Id = Guid.NewGuid(),
-            Name = $"{dto.Name} - {day}",
-            Date = dto.StartDate.AddDays(offset),
-            Meals = meals,
-            FreeItems = ExtractFreeItemsFromMeals(meals)
-        };
+            if (dto is null) return BadRequest("Invalid weekly plan.");
 
-            allPlans.Add(plan);
-            allRecipeIds.AddRange(meals.Where(m => m.RecipeId.HasValue).Select(m => m.RecipeId!.Value));
-            allExtras.AddRange(plan.FreeItems);
-            offset++;
+            var weekText = new (string Day, string? Text)[]
+            {
+                ("Monday", dto.Monday),
+                ("Tuesday", dto.Tuesday),
+                ("Wednesday", dto.Wednesday),
+                ("Thursday", dto.Thursday),
+                ("Friday", dto.Friday),
+                ("Saturday", dto.Saturday),
+                ("Sunday", dto.Sunday)
+            };
+
+            var allPlans = new List<MealPlan>();
+            var allRecipeIds = new List<Guid>();
+            var allExtras = new List<string>();
+
+            int offset = 0;
+            foreach (var (day, text) in weekText)
+            {
+                if (string.IsNullOrWhiteSpace(text)) { offset++; continue; }
+
+                var parsed = await _llm.ParseAsync(text);
+                var meals = await MapParsedMealsAsync(parsed);
+                var freeItems = ExtractFreeItemsFromMeals(meals);
+
+                var plan = new MealPlan
+                {
+                    Id = Guid.NewGuid(),
+                    Name = $"{dto.Name} - {day}",
+                    Date = dto.StartDate.AddDays(offset),
+                    Meals = meals,
+                    FreeItems = freeItems
+                };
+
+                allPlans.Add(plan);
+                allRecipeIds.AddRange(meals.Where(m => m.RecipeId.HasValue).Select(m => m.RecipeId!.Value));
+                allExtras.AddRange(freeItems);
+                offset++;
             }
 
             var shopping = await BuildShoppingListAsync(allRecipeIds, allExtras);
@@ -189,8 +193,6 @@ public async Task<ActionResult<WeeklyCreateResponse>> PreviewWeeklyMealPlan([Fro
                 ShoppingList = shopping
             });
         }
-
-        
 
         // ---------- Shopping list (per plan) ----------
 
@@ -215,25 +217,20 @@ public async Task<ActionResult<WeeklyCreateResponse>> PreviewWeeklyMealPlan([Fro
                 .Select(m => m.RecipeId!.Value)
                 .ToList();
 
-            var freeExtras = ExtractFreeItemsFromMeals(mealPlan.Meals.ToList());
-
-            var list = await BuildShoppingListAsync(recipeIds, freeExtras);
+            var extras = mealPlan.FreeItems ?? ExtractFreeItemsFromMeals(mealPlan.Meals.ToList());
+            var list = await BuildShoppingListAsync(recipeIds, extras);
             return Ok(list);
         }
 
-        // ---------- Lookups & helpers ----------
+        // ---------- Helpers ----------
 
-        /// Map LLM parsed meals into persisted Meals.
-        /// - If MatchedRecipeTitle matches a Recipe, set RecipeId.
-        /// - If no match, put title into FreeText.
-        /// - Append FreeTextItems to FreeText (comma-separated) so your shopping list
-        ///   logic keeps working without schema changes.
+        /// Map LLM parsed meals into persisted Meals
         private async Task<List<Meal>> MapParsedMealsAsync(LlmMealPlanParser.ParsedMealPlan parsed)
         {
             var meals = new List<Meal>();
             if (parsed?.Meals is null) return meals;
 
-            // Preload titles once to reduce queries
+            // Preload all recipe titles
             var allRecipes = await _db.Recipes
                 .AsNoTracking()
                 .Select(r => new { r.Id, r.Title })
@@ -251,17 +248,13 @@ public async Task<ActionResult<WeeklyCreateResponse>> PreviewWeeklyMealPlan([Fro
                     if (match != null) recipeId = match.Id;
                 }
 
-                if (recipeId == null)
-                {
-                    // Use the unmatched title (if present) as the meal text
-                    if (!string.IsNullOrWhiteSpace(pm.UnmatchedMealTitle))
-                        freeText = pm.UnmatchedMealTitle.Trim();
-                }
+                if (recipeId == null && !string.IsNullOrWhiteSpace(pm.UnmatchedMealTitle))
+                    freeText = pm.UnmatchedMealTitle.Trim();
 
-                // Append parser free-text items (extras) so the shopping-list endpoint can pick them up
                 if (pm.FreeTextItems != null && pm.FreeTextItems.Count > 0)
                 {
-                    var extras = string.Join(", ", pm.FreeTextItems.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()));
+                    var extras = string.Join(", ",
+                        pm.FreeTextItems.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()));
                     if (!string.IsNullOrWhiteSpace(extras))
                         freeText = string.IsNullOrWhiteSpace(freeText) ? extras : $"{freeText}, {extras}";
                 }
@@ -278,27 +271,24 @@ public async Task<ActionResult<WeeklyCreateResponse>> PreviewWeeklyMealPlan([Fro
             return meals;
         }
 
-        /// Extracts extras from Meal.FreeText (comma/semicolon/newline delimited).
+        /// Extracts extras from Meal.FreeText
         private static List<string> ExtractFreeItemsFromMeals(List<Meal> meals)
         {
             var extras = new List<string>();
             foreach (var m in meals)
             {
                 if (string.IsNullOrWhiteSpace(m.FreeText)) continue;
-                var parts = m.FreeText
-                    .Split(new[] { '\n', ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(s => s.Trim())
-                    .Where(s => !string.IsNullOrWhiteSpace(s))
-                    .ToList();
-                // We only want "extra items", not the dish name, but since we
-                // appended extras to FreeText and dish name is often first,
-                // this simple approach works well enough for now.
-                extras.AddRange(parts);
+                extras.AddRange(
+                    m.FreeText
+                        .Split(new[] { '\n', ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(s => s.Trim())
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                );
             }
-            return extras;
+            return extras.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         }
 
-        /// Builds a shopping list from recipe ingredients + extra free items.
+        /// Builds a shopping list from recipe ingredients + extras
         private async Task<ShoppingListResponse> BuildShoppingListAsync(List<Guid> recipeIds, List<string> extraItems)
         {
             var rows = await _db.RecipeIngredients
@@ -307,9 +297,9 @@ public async Task<ActionResult<WeeklyCreateResponse>> PreviewWeeklyMealPlan([Fro
                 .Where(ri => recipeIds.Contains(ri.RecipeId))
                 .ToListAsync();
 
-            // Aggregate recipe ingredients
             var grouped = new Dictionary<string, ShoppingListItemDto>(StringComparer.OrdinalIgnoreCase);
 
+            // aggregate recipe ingredients
             foreach (var ri in rows)
             {
                 var key = ri.Ingredient.Name.Trim();
@@ -329,7 +319,7 @@ public async Task<ActionResult<WeeklyCreateResponse>> PreviewWeeklyMealPlan([Fro
                 if (!item.SourceRecipes.Contains(ri.RecipeId)) item.SourceRecipes.Add(ri.RecipeId);
             }
 
-            // Add extras (no unit/amount)
+            // add extras
             foreach (var extra in extraItems)
             {
                 var key = extra.Trim();
@@ -352,7 +342,7 @@ public async Task<ActionResult<WeeklyCreateResponse>> PreviewWeeklyMealPlan([Fro
             };
         }
 
-        // ---------- DTO mapping (unchanged) ----------
+        // ---------- DTO mapping ----------
 
         [HttpGet]
         public async Task<ActionResult<List<MealPlanDto>>> GetAll()
