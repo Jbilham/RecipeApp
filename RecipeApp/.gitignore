@@ -1,0 +1,5 @@
+# Sensitive config
+appsettings.json
+appsettings.Development.json
+oldapikey
+.env
