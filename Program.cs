@@ -32,6 +32,10 @@ builder.Services.AddSingleton(new OpenAIClient(apiKey));
 // --- Build and configure app ---
 var app = builder.Build();
 
+
+// ⭐ Use CORS
+app.UseCors("AllowFrontend");
+
 // --- Middleware ---
 if (app.Environment.IsDevelopment())
 {
