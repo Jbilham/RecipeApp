@@ -25,8 +25,8 @@ namespace RecipeApp.Controllers
 
         // ---------- Single plan ----------
         [HttpPost]
-        [Consumes("multipart/form-data")]
-        public async Task<ActionResult<MealPlanDto>> CreateMealPlan([FromForm] CreateMealPlanDto dto)
+        [Consumes("application/json")]
+        public async Task<ActionResult<MealPlanDto>> CreateMealPlan([FromBody] CreateMealPlanDto dto)
         {
             if (dto is null) return BadRequest("Invalid meal plan.");
 
@@ -137,10 +137,19 @@ namespace RecipeApp.Controllers
             await _db.SaveChangesAsync();
 
             var response = new WeeklyCreateResponse
-            {
-                Plans = createdPlans.Select(ToDto).ToList(),
-                ShoppingList = weeklyList
-            };
+        {
+            Plans = createdPlans.Select(ToDto).ToList(),
+            ShoppingList = weeklyList
+        };
+
+        // 🔗 Include the snapshot ID in the response
+        return Ok(new
+        {
+            message = "Meal plan and shopping list created successfully",
+            shoppingListId = snapshot.Id,
+            response
+        });
+
 
             return Ok(response);
         }
@@ -242,7 +251,88 @@ namespace RecipeApp.Controllers
 
         // ---------- Helpers ----------
         private async Task<List<Meal>> MapParsedMealsAsync(LlmMealPlanParser.ParsedMealPlan parsed)
+{
+    var meals = new List<Meal>();
+    if (parsed?.Meals is null) return meals;
+
+    string Normalize(string input)
+    {
+        return input
+            .ToLower()
+            .Replace("&", "and")
+            .Replace("-", " ")
+            .Replace("  ", " ")
+            .Trim();
+    }
+
+    var allRecipes = await _db.Recipes
+        .AsNoTracking()
+        .Select(r => new { r.Id, r.Title })
+        .ToListAsync();
+
+    foreach (var pm in parsed.Meals)
+    {
+        string? normalizedName = pm.MatchedRecipeTitle ?? pm.UnmatchedMealTitle;
+        Recipe? matchedRecipe = null;
+
+        if (!string.IsNullOrWhiteSpace(normalizedName))
         {
+            var normalizedSearch = Normalize(normalizedName);
+
+            // 1️⃣ Direct partial DB match (Postgres ILIKE)
+            matchedRecipe = await _db.Recipes
+                .FirstOrDefaultAsync(r => EF.Functions.ILike(r.Title, $"%{normalizedSearch}%"));
+
+            // 2️⃣ In-memory normalized text match
+            if (matchedRecipe == null)
+            {
+                matchedRecipe = allRecipes
+                    .Select(r => new Recipe { Id = r.Id, Title = r.Title })
+                    .FirstOrDefault(r =>
+                        Normalize(r.Title).Contains(normalizedSearch) ||
+                        normalizedSearch.Contains(Normalize(r.Title)));
+            }
+
+            // 3️⃣ Word overlap fuzzy match
+            if (matchedRecipe == null)
+            {
+                var words = normalizedSearch.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                matchedRecipe = allRecipes
+                    .Select(r => new Recipe { Id = r.Id, Title = r.Title })
+                    .FirstOrDefault(r =>
+                    {
+                        var titleWords = Normalize(r.Title).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        return words.Intersect(titleWords).Count() >= Math.Max(1, words.Length / 2);
+                    });
+            }
+        }
+
+        // Combine any free-text items (like “fruit”, “yogurt”, etc.)
+        string? combinedFreeText = null;
+        if (pm.FreeTextItems != null && pm.FreeTextItems.Any())
+            combinedFreeText = string.Join(", ", pm.FreeTextItems);
+
+        // 4️⃣ Construct final Meal entry
+        meals.Add(new Meal
+        {
+            Id = Guid.NewGuid(),
+            MealType = pm.MealType ?? "Meal",
+            RecipeId = matchedRecipe?.Id,
+            FreeText = matchedRecipe == null
+                ? $"{normalizedName ?? combinedFreeText ?? "Meal"} (Recipe Unknown)"
+                : combinedFreeText
+        });
+
+        Console.WriteLine($"🟢 Matched '{normalizedName}' → {(matchedRecipe != null ? matchedRecipe.Title : "❌ No match")}");
+    }
+
+    return meals;
+}
+
+            ////insert above here//////
+                    /// 
+                    /// private async Task<List<Meal>> MapParsedMealsAsync(LlmMealPlanParser.ParsedMealPlan parsed)
+      /*  {
             var meals = new List<Meal>();
             if (parsed?.Meals is null) return meals;
 
@@ -286,7 +376,7 @@ namespace RecipeApp.Controllers
 
             return meals;
         }
-
+*/
         private static List<string> ExtractFreeItemsFromMeals(List<Meal> meals)
         {
             var extras = new List<string>();

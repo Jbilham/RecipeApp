@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json;
 
 namespace RecipeApp.Models
 {
@@ -9,15 +10,38 @@ namespace RecipeApp.Models
     {
         [Key]
         public Guid Id { get; set; }
+
         public string Name { get; set; } = string.Empty;  // e.g. "Week 1 Day 1"
         public DateTime? Date { get; set; }
 
         public ICollection<Meal> Meals { get; set; } = new List<Meal>();
 
-        // 🆕 new field
-        [Column(TypeName = "jsonb")]           // works with Postgres; if SQLite, just remove attribute
-        public List<string>? FreeItems { get; set; } = new();
+        // 🧩 Changed: store FreeItems as serialized JSON text, not List<string>
+        [Column(TypeName = "text")]
+        public string? FreeItemsJson { get; set; }
 
+        // Helper property (not mapped) for code convenience
+        [NotMapped]
+        public List<string> FreeItems
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(FreeItemsJson))
+                    return new List<string>();
+                try
+                {
+                    return JsonSerializer.Deserialize<List<string>>(FreeItemsJson) ?? new List<string>();
+                }
+                catch
+                {
+                    return new List<string>();
+                }
+            }
+            set
+            {
+                FreeItemsJson = JsonSerializer.Serialize(value ?? new List<string>());
+            }
+        }
     }
 
     public class Meal
