@@ -135,6 +135,16 @@ namespace RecipeApp.Controllers
 
             _db.ShoppingListSnapshots.Add(snapshot);
             await _db.SaveChangesAsync();
+            // ✅ Re-load plans with Recipe included
+            var planIds = allPlans.Select(p => p.Id).ToList();
+
+            var refreshedPlans = await _db.MealPlans
+                .Where(p => planIds.Contains(p.Id))
+                .Include(p => p.Meals)
+                    .ThenInclude(m => m.Recipe)
+                .AsNoTracking()
+                .ToListAsync();
+
 
             var response = new WeeklyCreateResponse
         {
