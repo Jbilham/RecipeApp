@@ -39,6 +39,8 @@ builder.Services.AddDbContext<AppDb>(options =>
 builder.Services.AddScoped<MealPlanParser>();
 builder.Services.AddScoped<LlmMealPlanParser>();
 builder.Services.AddScoped<LlmIngredientNormalizer>();
+builder.Services.AddScoped<ShoppingListBuilder>();
+builder.Services.AddScoped<MealPlanAssembler>();
 
 // --- OpenAI setup ---
 var apiKey = builder.Configuration["OpenAI:ApiKey"];
