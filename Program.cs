@@ -12,8 +12,9 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy
-            .WithOrigins("http://localhost:5173") // React dev server
+        policy.WithOrigins
+            ("http://localhost:5173", 
+            "http://localhost:5174") // React dev server
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
@@ -22,6 +23,7 @@ builder.Services.AddCors(options =>
 
 // --- Add services to the container ---
 builder.Services.AddControllers();
+builder.Services.AddHttpClient();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {

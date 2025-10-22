@@ -12,6 +12,8 @@ namespace RecipeApp.Models
         public Guid Id { get; set; }
 
         public string Name { get; set; } = string.Empty;  // e.g. "Week 1 Day 1"
+        
+        [Column(TypeName = "timestamp without time zone")]
         public DateTime? Date { get; set; }
 
         public ICollection<Meal> Meals { get; set; } = new List<Meal>();

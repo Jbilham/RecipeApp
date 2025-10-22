@@ -15,6 +15,18 @@
           }
         }
       },
+      "Ical.Net/5.1.1": {
+        "type": "package",
+        "dependencies": {
+          "NodaTime": "3.2.2"
+        },
+        "compile": {
+          "lib/net8.0/Ical.Net.dll": {}
+        },
+        "runtime": {
+          "lib/net8.0/Ical.Net.dll": {}
+        }
+      },
       "Microsoft.AspNetCore.OpenApi/8.0.20": {
         "type": "package",
         "dependencies": {
@@ -707,6 +719,19 @@
           "buildTransitive/Mono.TextTemplating.targets": {}
         }
       },
+      "NodaTime/3.2.2": {
+        "type": "package",
+        "compile": {
+          "lib/net8.0/NodaTime.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/NodaTime.dll": {
+            "related": ".pdb;.xml"
+          }
+        }
+      },
       "Npgsql/9.0.3": {
         "type": "package",
         "dependencies": {
@@ -1141,6 +1166,24 @@
         "lib/netstandard2.0/Humanizer.dll",
         "lib/netstandard2.0/Humanizer.xml",
         "logo.png"
+      ]
+    },
+    "Ical.Net/5.1.1": {
+      "sha512": "pS0V0Vix3dkxrygTMBPFl9Mmu3Q3Z/Cl1kwlqmrjrsisWBW53nndOzJP2gUlvjEccYzW8UJETNuLkxcL9wmHrg==",
+      "type": "package",
+      "path": "ical.net/5.1.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "assets/icon.png",
+        "assets/logo.png",
+        "assets/readme.md",
+        "ical.net.5.1.1.nupkg.sha512",
+        "ical.net.nuspec",
+        "lib/net6.0/Ical.Net.dll",
+        "lib/net8.0/Ical.Net.dll",
+        "lib/netstandard2.0/Ical.Net.dll",
+        "lib/netstandard2.1/Ical.Net.dll"
       ]
     },
     "Microsoft.AspNetCore.OpenApi/8.0.20": {
@@ -2850,6 +2893,27 @@
         "readme.md"
       ]
     },
+    "NodaTime/3.2.2": {
+      "sha512": "dmju5W0UYC3QP/UJM0juKAZkH0HSDMp0gH91A0+mT9M0kgyM2Jm67hUZPl/WRQLq8Lijjqmdk8kyAViWFWM7dA==",
+      "type": "package",
+      "path": "nodatime/3.2.2",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "README.md",
+        "lib/net6.0/NodaTime.dll",
+        "lib/net6.0/NodaTime.pdb",
+        "lib/net6.0/NodaTime.xml",
+        "lib/net8.0/NodaTime.dll",
+        "lib/net8.0/NodaTime.pdb",
+        "lib/net8.0/NodaTime.xml",
+        "lib/netstandard2.0/NodaTime.dll",
+        "lib/netstandard2.0/NodaTime.pdb",
+        "lib/netstandard2.0/NodaTime.xml",
+        "nodatime.3.2.2.nupkg.sha512",
+        "nodatime.nuspec"
+      ]
+    },
     "Npgsql/9.0.3": {
       "sha512": "tPvY61CxOAWxNsKLEBg+oR646X4Bc8UmyQ/tJszL/7mEmIXQnnBhVJZrZEEUv0Bstu0mEsHZD5At3EO8zQRAYw==",
       "type": "package",
@@ -3489,6 +3553,7 @@
   },
   "projectFileDependencyGroups": {
     "net8.0": [
+      "Ical.Net >= 5.1.1",
       "Microsoft.AspNetCore.OpenApi >= 8.0.20",
       "Microsoft.EntityFrameworkCore >= 9.0.9",
       "Microsoft.EntityFrameworkCore.Tools >= 9.0.9",
@@ -3540,6 +3605,10 @@
       "net8.0": {
         "targetAlias": "net8.0",
         "dependencies": {
+          "Ical.Net": {
+            "target": "Package",
+            "version": "[5.1.1, )"
+          },
           "Microsoft.AspNetCore.OpenApi": {
             "target": "Package",
             "version": "[8.0.20, )"

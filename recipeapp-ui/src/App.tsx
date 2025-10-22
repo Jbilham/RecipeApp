@@ -4,7 +4,8 @@ import Home from "./pages/Home";
 import UploadRecipe from "./pages/UploadRecipe";
 import UploadMealPlan from "./pages/UploadMealPlan";
 import ShoppingLists from "./pages/ShoppingLists";
-import ShoppingListView from "./pages/ShoppingListView"; // ✅ ADD THIS LINE
+import ShoppingListView from "./pages/ShoppingListView";
+import TrainingPeaksImport from "./pages/TrainingPeaksImport"; // ✅ add this
 
 export default function App() {
   return (
@@ -15,7 +16,8 @@ export default function App() {
         <Route path="/upload-recipe" element={<UploadRecipe />} />
         <Route path="/upload-mealplan" element={<UploadMealPlan />} />
         <Route path="/shopping-lists" element={<ShoppingLists />} />
-        <Route path="/shopping-list/:id" element={<ShoppingListView />} /> {/* ✅ this now works */}
+        <Route path="/shopping-list/:id" element={<ShoppingListView />} />
+        <Route path="/import" element={<TrainingPeaksImport />} /> {/* ✅ New page */}
       </Routes>
     </Router>
   );

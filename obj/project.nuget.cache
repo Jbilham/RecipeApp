@@ -1,10 +1,11 @@
 {
   "version": 2,
-  "dgSpecHash": "naV63NEzmZ8=",
+  "dgSpecHash": "dZRigxg3TlQ=",
   "success": true,
   "projectFilePath": "/Users/jamesbilham/RecipeApp/RecipeApp.csproj",
   "expectedPackageFiles": [
     "/Users/jamesbilham/.nuget/packages/humanizer.core/2.14.1/humanizer.core.2.14.1.nupkg.sha512",
+    "/Users/jamesbilham/.nuget/packages/ical.net/5.1.1/ical.net.5.1.1.nupkg.sha512",
     "/Users/jamesbilham/.nuget/packages/microsoft.aspnetcore.openapi/8.0.20/microsoft.aspnetcore.openapi.8.0.20.nupkg.sha512",
     "/Users/jamesbilham/.nuget/packages/microsoft.bcl.asyncinterfaces/7.0.0/microsoft.bcl.asyncinterfaces.7.0.0.nupkg.sha512",
     "/Users/jamesbilham/.nuget/packages/microsoft.build.framework/17.8.3/microsoft.build.framework.17.8.3.nupkg.sha512",
@@ -34,6 +35,7 @@
     "/Users/jamesbilham/.nuget/packages/microsoft.extensions.primitives/9.0.9/microsoft.extensions.primitives.9.0.9.nupkg.sha512",
     "/Users/jamesbilham/.nuget/packages/microsoft.openapi/1.6.14/microsoft.openapi.1.6.14.nupkg.sha512",
     "/Users/jamesbilham/.nuget/packages/mono.texttemplating/3.0.0/mono.texttemplating.3.0.0.nupkg.sha512",
+    "/Users/jamesbilham/.nuget/packages/nodatime/3.2.2/nodatime.3.2.2.nupkg.sha512",
     "/Users/jamesbilham/.nuget/packages/npgsql/9.0.3/npgsql.9.0.3.nupkg.sha512",
     "/Users/jamesbilham/.nuget/packages/npgsql.entityframeworkcore.postgresql/9.0.4/npgsql.entityframeworkcore.postgresql.9.0.4.nupkg.sha512",
     "/Users/jamesbilham/.nuget/packages/openai/2.0.0/openai.2.0.0.nupkg.sha512",

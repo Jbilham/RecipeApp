@@ -80,7 +80,7 @@ namespace RecipeApp.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTime?>("Date")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("FreeItemsJson")
                         .HasColumnType("text");
@@ -292,7 +292,8 @@ namespace RecipeApp.Migrations
 
                     b.HasOne("RecipeApp.Models.Recipe", "Recipe")
                         .WithMany()
-                        .HasForeignKey("RecipeId");
+                        .HasForeignKey("RecipeId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("MealPlan");
 
