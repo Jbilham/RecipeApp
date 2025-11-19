@@ -1,10 +1,11 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>RecipeAppApp</AssemblyName>
+    <UserSecretsId>2d6c6b58-03e4-4da6-b9ed-57a2a3b1e48f</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

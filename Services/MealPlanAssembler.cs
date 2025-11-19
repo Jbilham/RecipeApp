@@ -1,94 +1,94 @@
 using Microsoft.EntityFrameworkCore;
 using RecipeApp.Data;
 using RecipeApp.Models;
-using RecipeApp.Dtos;
-using System.Globalization;
 
-namespace RecipeApp.Services;
-
-/// <summary>
-/// Shared logic for constructing weekly meal plans from parsed data.
-/// </summary>
-public class MealPlanAssembler
+namespace RecipeApp.Services
 {
-    private readonly AppDb _db;
-    public MealPlanAssembler(AppDb db) => _db = db;
-
-    public async Task<List<MealPlan>> BuildWeeklyPlansAsync(
-        IEnumerable<LlmMealPlanParser.ParsedMealPlan> parsedPlans,
-        DateTime weekStart)
+    public class MealPlanAssembler
     {
-        Console.WriteLine("🔹 Assembling weekly meal plans…");
+        private readonly AppDb _db;
+        private readonly LlmIngredientNormalizer _normalizer;
 
-        var start = weekStart.Date;
-        var end = start.AddDays(7);
-        var results = new List<MealPlan>();
-
-        foreach (var parsed in parsedPlans)
+        public MealPlanAssembler(AppDb db, LlmIngredientNormalizer normalizer)
         {
-            var date = parsed.Date ?? start;
-            if (date < start || date >= end) continue;
+            _db = db;
+            _normalizer = normalizer;
+        }
 
-            var dayName = date.ToString("dddd", CultureInfo.InvariantCulture);
+        public async Task<MealPlan> CreateMealPlanFromParsedAsync(
+            LlmMealPlanParser.ParsedMealPlan parsed,
+            DateTime date,
+            string name)
+        {
             var meals = await MapParsedMealsAsync(parsed);
-
             var plan = new MealPlan
             {
                 Id = Guid.NewGuid(),
-                Name = $"Imported Plan - {dayName}",
-                Date = date,
-                Meals = meals
+                Name = name,
+                Date = DateTime.SpecifyKind(date, DateTimeKind.Unspecified),
+                Meals = SortMeals(meals)
             };
-            results.Add(plan);
+            _db.MealPlans.Add(plan);
+            return plan;
         }
 
-        Console.WriteLine($"✅ {results.Count} meal plans assembled");
-        return results.OrderBy(r => r.Date).ToList();
-    }
-
-    private async Task<List<Meal>> MapParsedMealsAsync(LlmMealPlanParser.ParsedMealPlan parsed)
-    {
-        var meals = new List<Meal>();
-        if (parsed?.Meals == null) return meals;
-
-        string Normalize(string input) =>
-            input.ToLowerInvariant().Replace("&", "and").Replace("-", " ").Replace("  ", " ").Trim();
-
-        var allRecipes = await _db.Recipes.AsNoTracking()
-            .Select(r => new { r.Id, r.Title })
-            .ToListAsync();
-
-        foreach (var pm in parsed.Meals)
+        // ---------- Mapping Logic ----------
+        private async Task<List<Meal>> MapParsedMealsAsync(LlmMealPlanParser.ParsedMealPlan parsed)
         {
-            string? normalizedName = pm.MatchedRecipeTitle ?? pm.UnmatchedMealTitle;
-            Recipe? matchedRecipe = null;
+            var meals = new List<Meal>();
+            if (parsed?.Meals is null) return meals;
 
-            if (!string.IsNullOrWhiteSpace(normalizedName))
+            string Normalize(string input) =>
+                input.ToLower().Replace("&", "and").Replace("-", " ").Replace("  ", " ").Trim();
+
+            var allRecipes = await _db.Recipes.AsNoTracking().Select(r => new { r.Id, r.Title }).ToListAsync();
+
+            foreach (var pm in parsed.Meals)
             {
-                var norm = Normalize(normalizedName);
-                matchedRecipe = await _db.Recipes
-                    .FirstOrDefaultAsync(r => EF.Functions.ILike(r.Title, $"%{norm}%"))
-                    ?? allRecipes.Select(r => new Recipe { Id = r.Id, Title = r.Title })
-                        .FirstOrDefault(r =>
-                            Normalize(r.Title).Contains(norm) ||
-                            norm.Contains(Normalize(r.Title)));
+                string? normalizedName = pm.MatchedRecipeTitle ?? pm.UnmatchedMealTitle;
+                Recipe? matchedRecipe = null;
+
+                if (!string.IsNullOrWhiteSpace(normalizedName))
+                {
+                    var normalizedSearch = Normalize(normalizedName);
+                    matchedRecipe = await _db.Recipes
+                        .FirstOrDefaultAsync(r => EF.Functions.ILike(r.Title, $"%{normalizedSearch}%"))
+                        ?? allRecipes
+                            .Select(r => new Recipe { Id = r.Id, Title = r.Title })
+                            .FirstOrDefault(r =>
+                                Normalize(r.Title).Contains(normalizedSearch) ||
+                                normalizedSearch.Contains(Normalize(r.Title)));
+                }
+
+                string? combinedFreeText = pm.FreeTextItems != null && pm.FreeTextItems.Any()
+                    ? string.Join(", ", pm.FreeTextItems)
+                    : null;
+
+                meals.Add(new Meal
+                {
+                    Id = Guid.NewGuid(),
+                    MealType = pm.MealType ?? "Meal",
+                    RecipeId = matchedRecipe?.Id,
+                    FreeText = matchedRecipe == null
+                        ? normalizedName ?? combinedFreeText ?? "Meal"
+                        : combinedFreeText
+                });
             }
 
-            string? combinedFreeText = pm.FreeTextItems != null && pm.FreeTextItems.Any()
-                ? string.Join(", ", pm.FreeTextItems)
-                : null;
-
-            meals.Add(new Meal
-            {
-                Id = Guid.NewGuid(),
-                MealType = pm.MealType ?? "Meal",
-                RecipeId = matchedRecipe?.Id,
-                FreeText = matchedRecipe == null
-                    ? normalizedName ?? combinedFreeText ?? "Meal"
-                    : combinedFreeText
-            });
+            return meals;
         }
 
-        return meals;
+        private static List<Meal> SortMeals(IEnumerable<Meal> meals)
+        {
+            string[] order = { "breakfast", "mid-morning", "morning", "lunch", "mid-afternoon", "afternoon", "dinner", "evening" };
+            return meals
+                .OrderBy(m =>
+                {
+                    var idx = Array.FindIndex(order, o =>
+                        m.MealType != null && m.MealType.Contains(o, StringComparison.OrdinalIgnoreCase));
+                    return idx >= 0 ? idx : int.MaxValue;
+                })
+                .ToList();
+        }
     }
 }

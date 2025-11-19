@@ -20,16 +20,10 @@ namespace RecipeApp.Services
         }
 
         // -------------------- Helper Regex for quantities --------------------
-
-        // 🔹 Regex to capture "100g chicken", "2 x eggs", "1 cup oats", etc.
         private static readonly Regex _quantityRegex =
             new(@"(?:(?<qty>\d+(?:\.\d+)?)\s*(?<unit>g|kg|ml|l|tbsp|tsp|cup|cups|slice|slices|x)?\s*)?(?<name>[A-Za-z][A-Za-z\s\-]+)",
                 RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        /// <summary>
-        /// Extracts (name, quantity, unit) from a single free-text ingredient line.
-        /// Returns nulls when no numeric data present.
-        /// </summary>
         public static (string name, float? qty, string? unit) ParseIngredientText(string raw)
         {
             if (string.IsNullOrWhiteSpace(raw))
@@ -49,63 +43,67 @@ namespace RecipeApp.Services
         }
 
         // -------------------- Main LLM Parsing Logic --------------------
-
-        public async Task<ParsedMealPlan> ParseAsync(string freeText, CancellationToken ct = default)
+        public async Task<ParsedMealPlan?> ParseAsync(string freeText, CancellationToken ct = default)
         {
-            var result = new ParsedMealPlan();
-
             if (string.IsNullOrWhiteSpace(freeText))
-                return result;
+                return null;
 
-            // Load all recipe names
+            Console.WriteLine("🧠 Sending meal plan text to LLM for parsing…");
+
             var dbRecipes = await _db.Recipes
                 .AsNoTracking()
                 .Select(r => r.Title)
                 .ToListAsync(ct);
 
             var knownTitles = string.Join("\n", dbRecipes.Select(t => $"- {t}"));
-
             var chatClient = _oa.GetChatClient("gpt-4.1-mini");
 
             var messages = new List<ChatMessage>
             {
                 ChatMessage.CreateSystemMessage(
-                    "You are a strict meal-plan parser. You MUST return only valid JSON with this exact schema:\n" +
+                    "You are a meal-plan parser. Return ONLY valid JSON matching this schema:\n" +
                     "{ \"meals\": [ { \"mealType\": string, \"matchedRecipeTitle\": string|null, \"unmatchedMealTitle\": string|null, \"freeTextItems\": string[] } ] }\n" +
                     "Rules:\n" +
-                    "1) mealType should be one of: Breakfast, Lunch, Dinner, Snack, Mid-morning, Mid-afternoon (best guess).\n" +
-                    "2) matchedRecipeTitle must be the exact text of a title from the KNOWN_RECIPES list if you find a clear match; otherwise null.\n" +
-                    "3) If no match found but it looks like a named dish, set unmatchedMealTitle.\n" +
-                    "4) Extract ALL standalone food items, ingredients, or snacks as freeTextItems — even if they appear inside a larger meal description (e.g. 'banana', 'protein bar', '1 tbsp honey').\n" +
-                    "5) No markdown, no commentary, return ONLY JSON."
+                    "1) mealType = Breakfast, Lunch, Dinner, Snack, Mid-morning, Mid-afternoon (best guess).\n" +
+                    "2) matchedRecipeTitle = exact recipe name from KNOWN_RECIPES if clearly present.\n" +
+                    "3) unmatchedMealTitle = fallback dish name if not found in known recipes.\n" +
+                    "4) Extract ALL freeTextItems (snacks, sides, fruit, protein, etc.).\n" +
+                    "5) NO commentary, only JSON."
                 ),
                 ChatMessage.CreateUserMessage($"KNOWN_RECIPES:\n{knownTitles}\n\nMEAL_PLAN_TEXT:\n{freeText}")
             };
 
-            var resp = await chatClient.CompleteChatAsync(messages);
-
-            var json = resp.Value.Content[0].Text ?? "";
-            json = Regex.Replace(json, @"^```json\s*|\s*```$", "", RegexOptions.Multiline);
-
-            var parsed = JsonSerializer.Deserialize<ParsedMealPlan>(json, new JsonSerializerOptions
+            try
             {
-                PropertyNameCaseInsensitive = true
-            });
-            
-            if (parsed?.Meals != null)
-            {
-                foreach (var meal in parsed.Meals)
+                var resp = await chatClient.CompleteChatAsync(messages);
+                var json = resp.Value.Content[0].Text ?? "";
+                json = Regex.Replace(json, @"^```json\s*|\s*```$", "", RegexOptions.Multiline);
+
+                var parsed = JsonSerializer.Deserialize<ParsedMealPlan>(json, new JsonSerializerOptions
                 {
-                    foreach (var item in meal.FreeTextItems)
-                        meal.ParsedFreeItemsDetailed.Add(ParseIngredientText(item));
-                }
-            }
+                    PropertyNameCaseInsensitive = true
+                });
 
-            return parsed ?? result;
+                if (parsed?.Meals != null)
+                {
+                    foreach (var meal in parsed.Meals)
+                    {
+                        foreach (var item in meal.FreeTextItems)
+                            meal.ParsedFreeItemsDetailed.Add(ParseIngredientText(item));
+                    }
+                }
+
+                Console.WriteLine("✅ LLM parse successful.");
+                return parsed;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ LLM parse failed: {ex.Message}");
+                return null;
+            }
         }
 
         // -------------------- Data Structures --------------------
-
         public class ParsedMealPlan
         {
             public List<ParsedMeal> Meals { get; set; } = new();
@@ -117,8 +115,6 @@ namespace RecipeApp.Services
             public string? MatchedRecipeTitle { get; set; }
             public string? UnmatchedMealTitle { get; set; }
             public List<string> FreeTextItems { get; set; } = new();
-
-            // 🆕 Structured version of FreeTextItems
             public List<(string name, float? qty, string? unit)> ParsedFreeItemsDetailed { get; set; } = new();
         }
     }

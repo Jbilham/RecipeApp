@@ -36,7 +36,6 @@ public class ShoppingListBuilder
                  .Replace("&", "and")
                  .Replace("-", " ")
                  .Replace("x ", "")
-                 .Replace("s,", ",")
                  .Replace("  ", " ")
                  .Trim();
 

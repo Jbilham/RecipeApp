@@ -7,6 +7,7 @@ export default function Navbar() {
         <Link to="/" className="hover:text-yellow-400">Home</Link>
         <Link to="/upload-recipe" className="hover:text-yellow-400">Upload Recipe</Link>
         <Link to="/upload-mealplan" className="hover:text-yellow-400">Meal Plan</Link>
+        <Link to="/import" className="hover:text-yellow-400">TrainingPeaks Import</Link>
         <Link to="/shopping-lists" className="hover:text-yellow-400">Shopping Lists</Link>
       </div>
     </nav>

@@ -1,12 +1,3 @@
-/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeApp.csproj.AssemblyReference.cache
-/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/rpswa.dswa.cache.json
-/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeApp.GeneratedMSBuildEditorConfig.editorconfig
-/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeApp.AssemblyInfoInputs.cache
-/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeApp.AssemblyInfo.cs
-/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeApp.csproj.CoreCompileInputs.cache
-/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeAppApp.MvcApplicationPartsAssemblyInfo.cs
-/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeAppApp.MvcApplicationPartsAssemblyInfo.cache
-/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeApp.sourcelink.json
 /Users/jamesbilham/RecipeApp/bin/Debug/net8.0/appsettings.Development.json
 /Users/jamesbilham/RecipeApp/bin/Debug/net8.0/appsettings.json
 /Users/jamesbilham/RecipeApp/bin/Debug/net8.0/recipeapp-ui/package-lock.json
@@ -29,6 +20,7 @@
 /Users/jamesbilham/RecipeApp/bin/Debug/net8.0/RecipeAppApp.dll
 /Users/jamesbilham/RecipeApp/bin/Debug/net8.0/RecipeAppApp.pdb
 /Users/jamesbilham/RecipeApp/bin/Debug/net8.0/Humanizer.dll
+/Users/jamesbilham/RecipeApp/bin/Debug/net8.0/Ical.Net.dll
 /Users/jamesbilham/RecipeApp/bin/Debug/net8.0/Microsoft.AspNetCore.OpenApi.dll
 /Users/jamesbilham/RecipeApp/bin/Debug/net8.0/Microsoft.Bcl.AsyncInterfaces.dll
 /Users/jamesbilham/RecipeApp/bin/Debug/net8.0/Microsoft.Build.Locator.dll
@@ -54,6 +46,7 @@
 /Users/jamesbilham/RecipeApp/bin/Debug/net8.0/Microsoft.Extensions.Primitives.dll
 /Users/jamesbilham/RecipeApp/bin/Debug/net8.0/Microsoft.OpenApi.dll
 /Users/jamesbilham/RecipeApp/bin/Debug/net8.0/Mono.TextTemplating.dll
+/Users/jamesbilham/RecipeApp/bin/Debug/net8.0/NodaTime.dll
 /Users/jamesbilham/RecipeApp/bin/Debug/net8.0/Npgsql.dll
 /Users/jamesbilham/RecipeApp/bin/Debug/net8.0/Npgsql.EntityFrameworkCore.PostgreSQL.dll
 /Users/jamesbilham/RecipeApp/bin/Debug/net8.0/OpenAI.dll
@@ -138,6 +131,15 @@
 /Users/jamesbilham/RecipeApp/bin/Debug/net8.0/zh-Hans/Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
 /Users/jamesbilham/RecipeApp/bin/Debug/net8.0/zh-Hant/Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.resources.dll
 /Users/jamesbilham/RecipeApp/bin/Debug/net8.0/runtimes/browser/lib/net8.0/System.Text.Encodings.Web.dll
+/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeApp.csproj.AssemblyReference.cache
+/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/rpswa.dswa.cache.json
+/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeApp.GeneratedMSBuildEditorConfig.editorconfig
+/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeApp.AssemblyInfoInputs.cache
+/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeApp.AssemblyInfo.cs
+/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeApp.csproj.CoreCompileInputs.cache
+/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeAppApp.MvcApplicationPartsAssemblyInfo.cs
+/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeAppApp.MvcApplicationPartsAssemblyInfo.cache
+/Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeApp.sourcelink.json
 /Users/jamesbilham/RecipeApp/obj/Debug/net8.0/rjimswa.dswa.cache.json
 /Users/jamesbilham/RecipeApp/obj/Debug/net8.0/rjsmrazor.dswa.cache.json
 /Users/jamesbilham/RecipeApp/obj/Debug/net8.0/rjsmcshtml.dswa.cache.json
@@ -152,5 +154,3 @@
 /Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeAppApp.pdb
 /Users/jamesbilham/RecipeApp/obj/Debug/net8.0/RecipeApp.genruntimeconfig.cache
 /Users/jamesbilham/RecipeApp/obj/Debug/net8.0/ref/RecipeAppApp.dll
-/Users/jamesbilham/RecipeApp/bin/Debug/net8.0/Ical.Net.dll
-/Users/jamesbilham/RecipeApp/bin/Debug/net8.0/NodaTime.dll

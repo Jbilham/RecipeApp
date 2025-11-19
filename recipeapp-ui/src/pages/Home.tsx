@@ -3,6 +3,7 @@ export default function Home() {
   const cards = [
     { title: 'Upload Recipe', link: '/upload-recipe', color: 'from-blue-500 to-blue-700' },
     { title: 'Upload Meal Plan', link: '/upload-mealplan', color: 'from-yellow-400 to-yellow-600' },
+    { title: 'TrainingPeaks Import', link: '/import', color: 'from-purple-500 to-purple-700' },
     { title: 'View Shopping Lists', link: '/shopping-lists', color: 'from-green-500 to-green-700' }
   ];
   return (
