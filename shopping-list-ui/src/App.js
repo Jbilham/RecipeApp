@@ -18,7 +18,7 @@ function App() {
   };
 
   const buildShoppingList = () => {
-    fetch("http://localhost:5114/api/shoppinglist", {
+    fetch("http://localhost:5114/api/shoppinglists/build", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ recipeIds: selected })

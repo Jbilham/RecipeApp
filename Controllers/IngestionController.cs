@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using RecipeApp.Data;
 using RecipeApp.Dtos;
 using RecipeApp.Models;
+using RecipeApp.Services;
 using OpenAI;
 using OpenAI.Chat;
 using System.Text.Json;
@@ -15,11 +16,13 @@ namespace RecipeApp.Controllers
     {
         private readonly AppDb _db;
         private readonly OpenAIClient _openAI;
+        private readonly IUserContext _userContext;
 
-        public IngestionController(AppDb db, OpenAIClient openAI)
+        public IngestionController(AppDb db, OpenAIClient openAI, IUserContext userContext)
         {
             _db = db;
             _openAI = openAI;
+            _userContext = userContext;
         }
 
         private static (decimal? amount, string? unit) ParseQuantity(string? quantity)
@@ -81,12 +84,17 @@ namespace RecipeApp.Controllers
                 if (extracted == null)
                     return BadRequest("Failed to parse recipe content.");
 
+                var currentUser = await _userContext.GetCurrentUserAsync();
+
                 var recipe = new Recipe
                 {
                     Id = Guid.NewGuid(),
                     Title = extracted.Title,
                     Servings = extracted.Servings,
-                    RecipeIngredients = new List<RecipeIngredient>()
+                    RecipeIngredients = new List<RecipeIngredient>(),
+                    OwnerId = currentUser.Id,
+                    IsGlobal = false,
+                    AssignedToId = currentUser.Role == "Client" ? currentUser.Id : null
                 };
 
                 foreach (var i in extracted.Ingredients)
@@ -156,6 +164,7 @@ namespace RecipeApp.Controllers
                 if (files == null || files.Count == 0)
                     return BadRequest("No files uploaded.");     var chatClient = _openAI.GetChatClient("gpt-4.1-mini");
             
+            var currentUser = await _userContext.GetCurrentUserAsync();
             var createdRecipes = new List<object>();
 
             foreach (var file in files)
@@ -201,6 +210,9 @@ namespace RecipeApp.Controllers
                         Servings = extracted.Servings,
                         RecipeIngredients = new List<RecipeIngredient>()
                     };
+                    recipe.OwnerId = currentUser.Id;
+                    recipe.IsGlobal = false;
+                    recipe.AssignedToId = currentUser.Role == "Client" ? currentUser.Id : null;
 
                     foreach (var i in extracted.Ingredients)
                     {

@@ -19,17 +19,20 @@ public class MealPlanController : ControllerBase
     private readonly LlmMealPlanParser _llm;
     private readonly MealPlanAssembler _mealPlanAssembler;
     private readonly ShoppingListBuilder _shoppingListBuilder;
+    private readonly IUserContext _userContext;
 
     public MealPlanController(
         AppDb db,
         LlmMealPlanParser llm,
         MealPlanAssembler mealPlanAssembler,
-        ShoppingListBuilder shoppingListBuilder)
+        ShoppingListBuilder shoppingListBuilder,
+        IUserContext userContext)
     {
         _db = db;
         _llm = llm;
         _mealPlanAssembler = mealPlanAssembler;
         _shoppingListBuilder = shoppingListBuilder;
+        _userContext = userContext;
     }
 
     /// <summary>
@@ -57,18 +60,24 @@ public class MealPlanController : ControllerBase
                 dto.Name ?? "Imported Plan"
             );
 
-            _db.MealPlans.Add(plan);
-            await _db.SaveChangesAsync();
+            var currentUser = await _userContext.GetCurrentUserAsync();
+            plan.CreatedById = currentUser.Id;
+            plan.AssignedToId ??= currentUser.Id;
 
-            var recipeIds = plan.Meals
+            var selectedMeals = plan.Meals.Where(m => m.IsSelected).ToList();
+
+            var recipeIds = selectedMeals
                 .Where(m => m.RecipeId.HasValue)
                 .Select(m => m.RecipeId!.Value)
                 .ToList();
 
-            var freeItems = plan.Meals
-                .Where(m => !string.IsNullOrWhiteSpace(m.FreeText))
-                .Select(m => m.FreeText!)
+            var freeItems = selectedMeals
+                .SelectMany(m => m.ExtraItems)
                 .ToList();
+
+            plan.FreeItems = freeItems;
+
+            await _db.SaveChangesAsync();
 
             var shoppingList = await _shoppingListBuilder.BuildAsync(recipeIds, freeItems);
 
@@ -88,29 +97,40 @@ public class MealPlanController : ControllerBase
             Id = Guid.NewGuid(),
             MealType = m.MealType,
             RecipeId = m.RecipeId,
-            FreeText = m.FreeText
+            FreeText = m.FreeText,
+            ExtraItems = string.IsNullOrWhiteSpace(m.FreeText)
+                ? new List<string>()
+                : new List<string> { m.FreeText! },
+            IsSelected = true
         }).ToList();
+
+        var currentUserForDto = await _userContext.GetCurrentUserAsync();
 
         var planFromDto = new MealPlan
         {
             Id = Guid.NewGuid(),
             Name = dto.Name,
             Date = DateTime.SpecifyKind(dto.Date ?? DateTime.Now, DateTimeKind.Unspecified),
-            Meals = meals
+            Meals = meals,
+            CreatedById = currentUserForDto.Id,
+            AssignedToId = dto.AssignedUserId ?? currentUserForDto.Id
         };
 
-        _db.MealPlans.Add(planFromDto);
-        await _db.SaveChangesAsync();
+        var selectedMealsDto = meals.Where(m => m.IsSelected).ToList();
 
-        var recipeIdsDto = meals
+        var recipeIdsDto = selectedMealsDto
             .Where(m => m.RecipeId.HasValue)
             .Select(m => m.RecipeId!.Value)
             .ToList();
 
-        var freeItemsDto = meals
-            .Where(m => !string.IsNullOrWhiteSpace(m.FreeText))
-            .Select(m => m.FreeText!)
+        var freeItemsDto = selectedMealsDto
+            .SelectMany(m => m.ExtraItems)
             .ToList();
+
+        planFromDto.FreeItems = freeItemsDto;
+
+        _db.MealPlans.Add(planFromDto);
+        await _db.SaveChangesAsync();
 
         var shoppingListDto = await _shoppingListBuilder.BuildAsync(recipeIdsDto, freeItemsDto);
 

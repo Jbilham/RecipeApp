@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using RecipeApp.Data;
 using RecipeApp.Models;
 using RecipeApp.Dtos;
+using RecipeApp.Services;
 
 namespace RecipeApp.Controllers
 {
@@ -11,17 +12,24 @@ namespace RecipeApp.Controllers
     public class RecipesController : ControllerBase
     {
         private readonly AppDb _db;
+        private readonly IUserContext _userContext;
 
-        public RecipesController(AppDb db)
+        public RecipesController(AppDb db, IUserContext userContext)
         {
             _db = db;
+            _userContext = userContext;
         }
 
         // GET: api/recipes
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
+            var visibleUserIds = await _userContext.GetVisibleUserIdsAsync();
+
             var recipes = await _db.Recipes
+                .Where(r => r.IsGlobal ||
+                    (r.OwnerId.HasValue && visibleUserIds.Contains(r.OwnerId.Value)) ||
+                    (r.AssignedToId != null && visibleUserIds.Contains(r.AssignedToId.Value)))
                 .Include(r => r.RecipeIngredients)
                     .ThenInclude(ri => ri.Ingredient)
                 .Include(r => r.RecipeIngredients)
@@ -49,12 +57,17 @@ namespace RecipeApp.Controllers
         [HttpGet("{id}")]
         public async Task<IActionResult> GetById(Guid id)
         {
+            var visibleUserIds = await _userContext.GetVisibleUserIdsAsync();
+
             var recipe = await _db.Recipes
                 .Include(r => r.RecipeIngredients)
                     .ThenInclude(ri => ri.Ingredient)
                 .Include(r => r.RecipeIngredients)
                     .ThenInclude(ri => ri.Unit)
-                .FirstOrDefaultAsync(r => r.Id == id);
+                .FirstOrDefaultAsync(r => r.Id == id &&
+                    (r.IsGlobal ||
+                     (r.OwnerId.HasValue && visibleUserIds.Contains(r.OwnerId.Value)) ||
+                     (r.AssignedToId != null && visibleUserIds.Contains(r.AssignedToId.Value))));
 
             if (recipe == null)
                 return NotFound();
@@ -80,13 +93,23 @@ namespace RecipeApp.Controllers
         [HttpPost]
         public async Task<IActionResult> Create(CreateRecipeDto dto)
         {
+            var currentUser = await _userContext.GetCurrentUserAsync();
+
             var recipe = new Recipe
             {
                 Id = Guid.NewGuid(),
                 Title = dto.Title,
                 Servings = dto.Servings,
-                RecipeIngredients = new List<RecipeIngredient>()
+                RecipeIngredients = new List<RecipeIngredient>(),
+                OwnerId = currentUser.Id,
+                IsGlobal = dto.IsGlobal,
+                AssignedToId = dto.AssignedUserId
             };
+
+            if (!dto.IsGlobal && dto.AssignedUserId == null)
+            {
+                recipe.AssignedToId = currentUser.Role == "Client" ? currentUser.Id : null;
+            }
 
             foreach (var i in dto.Ingredients)
             {
@@ -96,11 +119,18 @@ namespace RecipeApp.Controllers
                     unit = await _db.Units.FirstOrDefaultAsync(u => u.Code == i.Unit);
                 }
 
-                var ingredient = new Ingredient
+                var ingredient = await _db.Ingredients
+                    .FirstOrDefaultAsync(x => x.Name.ToLower() == i.Ingredient.ToLower());
+
+                if (ingredient == null)
                 {
-                    Id = Guid.NewGuid(),
-                    Name = i.Ingredient
-                };
+                    ingredient = new Ingredient
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = i.Ingredient
+                    };
+                    _db.Ingredients.Add(ingredient);
+                }
 
                 var recipeIngredient = new RecipeIngredient
                 {
@@ -125,15 +155,26 @@ namespace RecipeApp.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(Guid id, CreateRecipeDto dto)
         {
+            var currentUser = await _userContext.GetCurrentUserAsync();
+            var visibleUserIds = await _userContext.GetVisibleUserIdsAsync();
+
             var recipe = await _db.Recipes
                 .Include(r => r.RecipeIngredients)
-                .FirstOrDefaultAsync(r => r.Id == id);
+                .FirstOrDefaultAsync(r => r.Id == id &&
+                    (r.IsGlobal ||
+                     (r.OwnerId.HasValue && visibleUserIds.Contains(r.OwnerId.Value)) ||
+                     (r.AssignedToId != null && visibleUserIds.Contains(r.AssignedToId.Value))));
 
             if (recipe == null)
                 return NotFound();
 
+            if (!recipe.IsGlobal && recipe.OwnerId.HasValue && recipe.OwnerId != currentUser.Id && currentUser.Role != "Master")
+                return Forbid();
+
             recipe.Title = dto.Title;
             recipe.Servings = dto.Servings;
+            recipe.IsGlobal = dto.IsGlobal;
+            recipe.AssignedToId = dto.AssignedUserId ?? (dto.IsGlobal ? null : recipe.AssignedToId);
 
             // clear old ingredients
             _db.RecipeIngredients.RemoveRange(recipe.RecipeIngredients);
@@ -147,11 +188,18 @@ namespace RecipeApp.Controllers
                     unit = await _db.Units.FirstOrDefaultAsync(u => u.Code == i.Unit);
                 }
 
-                var ingredient = new Ingredient
+                var ingredient = await _db.Ingredients
+                    .FirstOrDefaultAsync(x => x.Name.ToLower() == i.Ingredient.ToLower());
+
+        if (ingredient == null)
                 {
-                    Id = Guid.NewGuid(),
-                    Name = i.Ingredient
-                };
+                    ingredient = new Ingredient
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = i.Ingredient
+                    };
+                    _db.Ingredients.Add(ingredient);
+                }
 
                 var recipeIngredient = new RecipeIngredient
                 {
@@ -174,9 +222,13 @@ namespace RecipeApp.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(Guid id)
         {
+            var currentUser = await _userContext.GetCurrentUserAsync();
             var recipe = await _db.Recipes.FindAsync(id);
             if (recipe == null)
                 return NotFound();
+
+            if (!recipe.IsGlobal && recipe.OwnerId.HasValue && recipe.OwnerId != currentUser.Id && currentUser.Role != "Master")
+                return Forbid();
 
             _db.Recipes.Remove(recipe);
             await _db.SaveChangesAsync();

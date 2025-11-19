@@ -1,11 +1,13 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using RecipeApp.Models;
 
 namespace RecipeApp.Data
 {
-    public class AppDb : DbContext
+    public class AppDb : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>
     {
-        public AppDb(DbContextOptions<AppDb> options) : base(options) {}
+        public AppDb(DbContextOptions<AppDb> options) : base(options) { }
 
         public DbSet<Recipe> Recipes => Set<Recipe>();
         public DbSet<Ingredient> Ingredients => Set<Ingredient>();
@@ -16,11 +18,42 @@ namespace RecipeApp.Data
 
         public DbSet<MealPlan> MealPlans => Set<MealPlan>();
         public DbSet<Meal> Meals => Set<Meal>();
-        public DbSet<ShoppingListSnapshot> ShoppingListSnapshots { get; set; }
+        public DbSet<ShoppingListSnapshot> ShoppingListSnapshots => Set<ShoppingListSnapshot>();
+        public DbSet<MealPlanSnapshot> MealPlanSnapshots => Set<MealPlanSnapshot>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<AppUser>()
+                .HasMany(u => u.Children)
+                .WithOne(u => u.ParentUser)
+                .HasForeignKey(u => u.ParentUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Recipe>()
+                .HasOne(r => r.Owner)
+                .WithMany()
+                .HasForeignKey(r => r.OwnerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<Recipe>()
+                .HasOne(r => r.AssignedTo)
+                .WithMany()
+                .HasForeignKey(r => r.AssignedToId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<MealPlan>()
+                .HasOne(mp => mp.CreatedBy)
+                .WithMany()
+                .HasForeignKey(mp => mp.CreatedById)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<MealPlan>()
+                .HasOne(mp => mp.AssignedTo)
+                .WithMany()
+                .HasForeignKey(mp => mp.AssignedToId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             // 🔗 MealPlan ↔ Meal (1-to-many)
             modelBuilder.Entity<Meal>()
@@ -39,6 +72,30 @@ namespace RecipeApp.Data
             // ✅ Composite key for RecipeTag
             modelBuilder.Entity<RecipeTag>()
                 .HasKey(rt => new { rt.RecipeId, rt.TagId });
+
+            modelBuilder.Entity<ShoppingListSnapshot>()
+                .HasOne(s => s.MealPlanSnapshot)
+                .WithMany()
+                .HasForeignKey(s => s.MealPlanSnapshotId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<ShoppingListSnapshot>()
+                .HasOne(s => s.CreatedBy)
+                .WithMany()
+                .HasForeignKey(s => s.CreatedById)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<MealPlanSnapshot>()
+                .HasOne(m => m.ShoppingListSnapshot)
+                .WithMany()
+                .HasForeignKey(m => m.ShoppingListSnapshotId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<MealPlanSnapshot>()
+                .HasOne(m => m.CreatedBy)
+                .WithMany()
+                .HasForeignKey(m => m.CreatedById)
+                .OnDelete(DeleteBehavior.Cascade);
 
             // ✅ Seed Units
             modelBuilder.Entity<Unit>().HasData(

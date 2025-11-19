@@ -12,7 +12,13 @@ namespace RecipeApp.Models
         public Guid Id { get; set; }
 
         public string Name { get; set; } = string.Empty;  // e.g. "Week 1 Day 1"
-        
+
+        public Guid? CreatedById { get; set; }
+        public AppUser? CreatedBy { get; set; }
+
+        public Guid? AssignedToId { get; set; }
+        public AppUser? AssignedTo { get; set; }
+
         [Column(TypeName = "timestamp without time zone")]
         public DateTime? Date { get; set; }
 
@@ -57,5 +63,32 @@ namespace RecipeApp.Models
         public Recipe? Recipe { get; set; }
 
         public string? FreeText { get; set; } // "Protein shake + banana"
+
+        [Column(TypeName = "text")]
+        public string? ExtraItemsJson { get; set; }
+
+        [NotMapped]
+        public List<string> ExtraItems
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(ExtraItemsJson))
+                    return new List<string>();
+                try
+                {
+                    return JsonSerializer.Deserialize<List<string>>(ExtraItemsJson) ?? new List<string>();
+                }
+                catch
+                {
+                    return new List<string>();
+                }
+            }
+            set
+            {
+                ExtraItemsJson = JsonSerializer.Serialize(value ?? new List<string>());
+            }
+        }
+
+        public bool IsSelected { get; set; } = true;
     }
 }

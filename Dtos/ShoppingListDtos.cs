@@ -17,6 +17,7 @@ namespace RecipeApp.Dtos
         public string Ingredient { get; set; } = "";
         public decimal? Amount { get; set; }
         public string? Unit { get; set; }
+        public string Category { get; set; } = "Other";
         public List<Guid> SourceRecipes { get; set; } = new();
     }
 

@@ -13,7 +13,17 @@ namespace RecipeApp.Models
         [ForeignKey(nameof(MealPlanId))]
         public MealPlan? MealPlan { get; set; }
 
+        public Guid? MealPlanSnapshotId { get; set; }
+
+        [ForeignKey(nameof(MealPlanSnapshotId))]
+        public MealPlanSnapshot? MealPlanSnapshot { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        public Guid? CreatedById { get; set; }
+
+        [ForeignKey(nameof(CreatedById))]
+        public AppUser? CreatedBy { get; set; }
 
         // Store as serialized JSON text
         public string JsonData { get; set; } = string.Empty;
