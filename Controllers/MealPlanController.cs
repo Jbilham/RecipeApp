@@ -20,19 +20,22 @@ public class MealPlanController : ControllerBase
     private readonly MealPlanAssembler _mealPlanAssembler;
     private readonly ShoppingListBuilder _shoppingListBuilder;
     private readonly IUserContext _userContext;
+    private readonly MealPlanNutritionService _nutritionService;
 
     public MealPlanController(
         AppDb db,
         LlmMealPlanParser llm,
         MealPlanAssembler mealPlanAssembler,
         ShoppingListBuilder shoppingListBuilder,
-        IUserContext userContext)
+        IUserContext userContext,
+        MealPlanNutritionService nutritionService)
     {
         _db = db;
         _llm = llm;
         _mealPlanAssembler = mealPlanAssembler;
         _shoppingListBuilder = shoppingListBuilder;
         _userContext = userContext;
+        _nutritionService = nutritionService;
     }
 
     /// <summary>
@@ -77,6 +80,7 @@ public class MealPlanController : ControllerBase
 
             plan.FreeItems = freeItems;
 
+            var nutrition = await _nutritionService.EnsureNutritionAsync(new[] { plan });
             await _db.SaveChangesAsync();
 
             var shoppingList = await _shoppingListBuilder.BuildAsync(recipeIds, freeItems);
@@ -85,7 +89,8 @@ public class MealPlanController : ControllerBase
             return Ok(new
             {
                 Plan = plan,
-                ShoppingList = shoppingList
+                ShoppingList = shoppingList,
+                Nutrition = BuildNutritionSummary(plan, nutrition)
             });
         }
 
@@ -130,6 +135,7 @@ public class MealPlanController : ControllerBase
         planFromDto.FreeItems = freeItemsDto;
 
         _db.MealPlans.Add(planFromDto);
+        var dtoNutrition = await _nutritionService.EnsureNutritionAsync(new[] { planFromDto });
         await _db.SaveChangesAsync();
 
         var shoppingListDto = await _shoppingListBuilder.BuildAsync(recipeIdsDto, freeItemsDto);
@@ -138,7 +144,31 @@ public class MealPlanController : ControllerBase
         return Ok(new
         {
             Plan = planFromDto,
-            ShoppingList = shoppingListDto
+            ShoppingList = shoppingListDto,
+            Nutrition = BuildNutritionSummary(planFromDto, dtoNutrition)
         });
+    }
+
+    private static MealPlanNutritionSummaryDto BuildNutritionSummary(MealPlan plan, NutritionComputationResult result)
+    {
+        var summary = new MealPlanNutritionSummaryDto
+        {
+            WeeklyTotals = result.WeeklyTotals
+        };
+
+        if (!result.PlanTotals.TryGetValue(plan.Id, out var totals))
+        {
+            totals = new NutritionBreakdownDto();
+        }
+
+        summary.Plans.Add(new PlanNutritionSummaryDto
+        {
+            MealPlanId = plan.Id,
+            Name = plan.Name,
+            Date = plan.Date,
+            Totals = totals
+        });
+
+        return summary;
     }
 }

@@ -41,6 +41,10 @@ namespace RecipeApp.Controllers
                 RecipeId = r.Id,
                 Title = r.Title,
                 Servings = r.Servings,
+                Calories = r.Calories,
+                Protein = r.Protein,
+                Carbs = r.Carbs,
+                Fat = r.Fat,
                 Ingredients = r.RecipeIngredients.Select(ri => new RecipeIngredientDto
                 {
                     Ingredient = ri.Ingredient.Name,
@@ -77,6 +81,10 @@ namespace RecipeApp.Controllers
                 RecipeId = recipe.Id,
                 Title = recipe.Title,
                 Servings = recipe.Servings,
+                Calories = recipe.Calories,
+                Protein = recipe.Protein,
+                Carbs = recipe.Carbs,
+                Fat = recipe.Fat,
                 Ingredients = recipe.RecipeIngredients.Select(ri => new RecipeIngredientDto
                 {
                     Ingredient = ri.Ingredient.Name,
@@ -100,6 +108,11 @@ namespace RecipeApp.Controllers
                 Id = Guid.NewGuid(),
                 Title = dto.Title,
                 Servings = dto.Servings,
+                Calories = dto.Calories,
+                Protein = dto.Protein,
+                Carbs = dto.Carbs,
+                Fat = dto.Fat,
+                MacrosEstimated = false,
                 RecipeIngredients = new List<RecipeIngredient>(),
                 OwnerId = currentUser.Id,
                 IsGlobal = dto.IsGlobal,
@@ -173,6 +186,11 @@ namespace RecipeApp.Controllers
 
             recipe.Title = dto.Title;
             recipe.Servings = dto.Servings;
+            recipe.Calories = dto.Calories;
+            recipe.Protein = dto.Protein;
+            recipe.Carbs = dto.Carbs;
+            recipe.Fat = dto.Fat;
+            recipe.MacrosEstimated = false;
             recipe.IsGlobal = dto.IsGlobal;
             recipe.AssignedToId = dto.AssignedUserId ?? (dto.IsGlobal ? null : recipe.AssignedToId);
 

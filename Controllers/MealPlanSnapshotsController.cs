@@ -24,12 +24,14 @@ namespace RecipeApp.Controllers
         private readonly AppDb _db;
         private readonly ShoppingListBuilder _shoppingListBuilder;
         private readonly IUserContext _userContext;
+        private readonly MealPlanNutritionService _nutritionService;
 
-        public MealPlanSnapshotsController(AppDb db, ShoppingListBuilder shoppingListBuilder, IUserContext userContext)
+        public MealPlanSnapshotsController(AppDb db, ShoppingListBuilder shoppingListBuilder, IUserContext userContext, MealPlanNutritionService nutritionService)
         {
             _db = db;
             _shoppingListBuilder = shoppingListBuilder;
             _userContext = userContext;
+            _nutritionService = nutritionService;
         }
 
         [HttpGet]
@@ -173,7 +175,8 @@ namespace RecipeApp.Controllers
                 createdAt = snapshot.CreatedAt,
                 range = payload?.Range,
                 planCount = payload?.Plans?.Count ?? 0,
-                shoppingListSnapshotId = payload?.ShoppingListSnapshotId
+                shoppingListSnapshotId = payload?.ShoppingListSnapshotId,
+                weeklyNutritionTotals = payload?.WeeklyNutritionTotals
             };
         }
 
@@ -188,6 +191,7 @@ namespace RecipeApp.Controllers
                 weekStart = payload.WeekStart,
                 weekEnd = payload.WeekEnd,
                 createdAt = snapshot.CreatedAt,
+                weeklyNutritionTotals = payload.WeeklyNutritionTotals,
                 plans = payload.Plans ?? new List<MealPlanSnapshotPlan>(),
                 shoppingListSnapshotId = payload.ShoppingListSnapshotId
             };
@@ -226,6 +230,8 @@ namespace RecipeApp.Controllers
                 .Where(p => planIds.Contains(p.Id))
                 .ToListAsync();
 
+            var nutritionResult = await _nutritionService.EnsureNutritionAsync(plans);
+
             var planOrder = payload.Plans
                 .Select((plan, index) => new { plan.Id, index })
                 .ToDictionary(x => x.Id, x => x.index);
@@ -235,11 +241,14 @@ namespace RecipeApp.Controllers
 
             foreach (var plan in plans)
             {
+                nutritionResult.PlanTotals.TryGetValue(plan.Id, out var totals);
+
                 var planPayload = new MealPlanSnapshotPlan
                 {
                     Id = plan.Id,
                     Name = plan.Name,
                     Date = plan.Date,
+                    NutritionTotals = totals,
                     Meals = plan.Meals
                         .OrderBy(m => m.MealType)
                         .ThenBy(m => m.Id)
@@ -254,7 +263,8 @@ namespace RecipeApp.Controllers
                                 MissingRecipe = !meal.RecipeId.HasValue && !autoHandled,
                                 AutoHandled = autoHandled,
                                 FreeText = meal.FreeText,
-                                IsSelected = meal.IsSelected
+                                IsSelected = meal.IsSelected,
+                                Nutrition = ToMealNutritionDto(meal)
                             };
                         })
                         .ToList()
@@ -279,7 +289,8 @@ namespace RecipeApp.Controllers
                 WeekEnd = payload.WeekEnd,
                 Range = payload.Range,
                 Plans = orderedPlans,
-                ShoppingListSnapshotId = payload.ShoppingListSnapshotId
+                ShoppingListSnapshotId = payload.ShoppingListSnapshotId,
+                WeeklyNutritionTotals = nutritionResult.WeeklyTotals
             };
 
             var recipeIds = selectedMeals
@@ -310,6 +321,22 @@ namespace RecipeApp.Controllers
             };
 
             return new RebuildResult(newPayload, shoppingPayload);
+        }
+
+        private static MealNutritionDto? ToMealNutritionDto(Meal meal)
+        {
+            if (meal.Calories == null && meal.Protein == null && meal.Carbs == null && meal.Fat == null)
+                return null;
+
+            return new MealNutritionDto
+            {
+                Calories = meal.Calories ?? 0,
+                Protein = meal.Protein ?? 0,
+                Carbs = meal.Carbs ?? 0,
+                Fat = meal.Fat ?? 0,
+                Source = meal.NutritionSource,
+                Estimated = meal.NutritionEstimated
+            };
         }
 
         private sealed record RebuildResult(MealPlanSnapshotPayload MealPlanPayload, ShoppingListSnapshotPayload ShoppingPayload);

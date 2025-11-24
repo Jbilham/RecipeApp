@@ -67,6 +67,13 @@ namespace RecipeApp.Models
         [Column(TypeName = "text")]
         public string? ExtraItemsJson { get; set; }
 
+        public decimal? Calories { get; set; }
+        public decimal? Protein { get; set; }
+        public decimal? Carbs { get; set; }
+        public decimal? Fat { get; set; }
+        public string? NutritionSource { get; set; }
+        public bool NutritionEstimated { get; set; }
+
         [NotMapped]
         public List<string> ExtraItems
         {

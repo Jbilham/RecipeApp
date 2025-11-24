@@ -98,6 +98,26 @@ export default function TrainingPeaksImport() {
     }
   };
 
+  const hasNutrition = (data?: any) => {
+    if (!data) return false;
+    return (
+      (data.calories ?? 0) > 0 ||
+      (data.protein ?? 0) > 0 ||
+      (data.carbs ?? 0) > 0 ||
+      (data.fat ?? 0) > 0
+    );
+  };
+
+  const formatNutritionCalories = (value?: number) => {
+    if (value === undefined || value === null) return "—";
+    return `${Math.round(value)} kcal`;
+  };
+
+  const formatNutritionGrams = (value?: number) => {
+    if (value === undefined || value === null) return "—";
+    return `${Math.round(value)} g`;
+  };
+
   const groupedShopping = useMemo(() => {
     if (!result?.shoppingList?.items) return [];
     const groups = new Map<string, any[]>();
@@ -235,11 +255,19 @@ export default function TrainingPeaksImport() {
                 key={plan.id}
                 className="border rounded p-4 shadow-sm bg-gray-50"
               >
-                <h3 className="font-semibold">
-                  {plan.name} (
-                  {plan.date ? new Date(plan.date).toLocaleDateString() : ""})
-                </h3>
-                <ul className="list-disc ml-5 text-sm mt-1">
+            <h3 className="font-semibold">
+              {plan.name} (
+              {plan.date ? new Date(plan.date).toLocaleDateString() : ""})
+            </h3>
+            {plan.nutritionTotals && hasNutrition(plan.nutritionTotals) && (
+              <div className="mt-1 text-xs text-blue-900 flex flex-wrap gap-3">
+                <span>🔥 {formatNutritionCalories(plan.nutritionTotals.calories)}</span>
+                <span>💪 {formatNutritionGrams(plan.nutritionTotals.protein)} protein</span>
+                <span>🌾 {formatNutritionGrams(plan.nutritionTotals.carbs)} carbs</span>
+                <span>🥑 {formatNutritionGrams(plan.nutritionTotals.fat)} fat</span>
+              </div>
+            )}
+            <ul className="list-disc ml-5 text-sm mt-1">
                   {plan.meals.map((m: any, idx: number) => (
                     <li key={idx}>
                       <strong>{m.mealType}:</strong>{" "}
@@ -255,6 +283,59 @@ export default function TrainingPeaksImport() {
               </div>
             ))}
           </div>
+
+          {result.nutritionSummary && hasNutrition(result.nutritionSummary.weeklyTotals) && (
+            <div className="mt-8 rounded border border-blue-100 bg-blue-50 p-4 shadow-sm">
+              <h3 className="text-lg font-semibold text-blue-900 mb-2">Weekly nutrition summary</h3>
+              <div className="flex flex-wrap gap-4 text-sm text-blue-900">
+                <span>🔥 {formatNutritionCalories(result.nutritionSummary.weeklyTotals?.calories)}</span>
+                <span>💪 {formatNutritionGrams(result.nutritionSummary.weeklyTotals?.protein)} protein</span>
+                <span>🌾 {formatNutritionGrams(result.nutritionSummary.weeklyTotals?.carbs)} carbs</span>
+                <span>🥑 {formatNutritionGrams(result.nutritionSummary.weeklyTotals?.fat)} fat</span>
+              </div>
+              {result.nutritionSummary.plans && result.nutritionSummary.plans.length > 0 && (
+                <div className="mt-4 overflow-x-auto rounded border border-blue-100 bg-white shadow-sm">
+                  <table className="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead className="bg-blue-100 text-blue-900">
+                      <tr>
+                        <th className="px-4 py-2 text-left font-semibold">Plan</th>
+                        <th className="px-4 py-2 text-right font-semibold">Calories</th>
+                        <th className="px-4 py-2 text-right font-semibold">Protein</th>
+                        <th className="px-4 py-2 text-right font-semibold">Carbs</th>
+                        <th className="px-4 py-2 text-right font-semibold">Fat</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {result.nutritionSummary.plans.map((plan: any) => (
+                        <tr key={plan.mealPlanId ?? plan.name}>
+                          <td className="px-4 py-2">
+                            <div className="font-medium text-gray-900">{plan.name}</div>
+                            {plan.date && (
+                              <div className="text-xs text-gray-500">
+                                {new Date(plan.date).toLocaleDateString()}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-right">
+                            {formatNutritionCalories(plan.totals?.calories)}
+                          </td>
+                          <td className="px-4 py-2 text-right">
+                            {formatNutritionGrams(plan.totals?.protein)}
+                          </td>
+                          <td className="px-4 py-2 text-right">
+                            {formatNutritionGrams(plan.totals?.carbs)}
+                          </td>
+                          <td className="px-4 py-2 text-right">
+                            {formatNutritionGrams(plan.totals?.fat)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
           {result.shoppingListId && (
             <div className="mt-4 flex gap-3">

@@ -17,6 +17,12 @@ namespace RecipeApp.Models
         public Guid? AssignedToId { get; set; }
         public AppUser? AssignedTo { get; set; }
 
+        public decimal? Calories { get; set; }
+        public decimal? Protein { get; set; }
+        public decimal? Carbs { get; set; }
+        public decimal? Fat { get; set; }
+        public bool MacrosEstimated { get; set; }
+
         public ICollection<RecipeIngredient> RecipeIngredients { get; set; } = new List<RecipeIngredient>();
         public ICollection<RecipeTag> RecipeTags { get; set; } = new List<RecipeTag>();
     }

@@ -77,8 +77,10 @@ builder.Services.AddScoped<IUserContext, UserContext>();
 builder.Services.AddScoped<MealPlanParser>();
 builder.Services.AddScoped<LlmMealPlanParser>();
 builder.Services.AddScoped<LlmIngredientNormalizer>();
+builder.Services.AddScoped<LlmNutritionEstimator>();
 builder.Services.AddScoped<ShoppingListBuilder>();
 builder.Services.AddScoped<MealPlanAssembler>();
+builder.Services.AddScoped<MealPlanNutritionService>();
 builder.Services.AddScoped<ICalendarImportService, CalendarImportService>();
 
 // --- OpenAI setup ---

@@ -14,6 +14,7 @@ namespace RecipeApp.Dtos
         public bool AutoHandled { get; set; }
         public string? FreeText { get; set; }
         public bool IsSelected { get; set; } = true;
+        public MealNutritionDto? Nutrition { get; set; }
     }
 
     public class CalendarImportPlanDto
@@ -22,6 +23,7 @@ namespace RecipeApp.Dtos
         public string Name { get; set; } = string.Empty;
         public DateTime? Date { get; set; }
         public List<CalendarImportMealDto> Meals { get; set; } = new();
+        public NutritionBreakdownDto? NutritionTotals { get; set; }
     }
 
     public class CalendarImportMissingMealDto
@@ -43,5 +45,6 @@ namespace RecipeApp.Dtos
         public List<CalendarImportPlanDto> Plans { get; set; } = new();
         public List<CalendarImportMissingMealDto> MissingMeals { get; set; } = new();
         public ShoppingListResponse ShoppingList { get; set; } = new();
+        public MealPlanNutritionSummaryDto NutritionSummary { get; set; } = new();
     }
 }

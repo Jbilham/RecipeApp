@@ -22,19 +22,22 @@ namespace RecipeApp.Services
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly MealPlanAssembler _assembler;
         private readonly ShoppingListBuilder _shopping;
+        private readonly MealPlanNutritionService _nutrition;
 
         public CalendarImportService(
             AppDb db,
             LlmMealPlanParser llm,
             IHttpClientFactory httpClientFactory,
             MealPlanAssembler assembler,
-            ShoppingListBuilder shopping)
+            ShoppingListBuilder shopping,
+            MealPlanNutritionService nutrition)
         {
             _db = db;
             _llm = llm;
             _httpClientFactory = httpClientFactory;
             _assembler = assembler;
             _shopping = shopping;
+            _nutrition = nutrition;
         }
 
         public async Task<CalendarImportResult> ImportAsync(AppUser user, string url, string range)
@@ -202,6 +205,8 @@ namespace RecipeApp.Services
                 .Select(r => new { r.Id, r.Title })
                 .ToDictionaryAsync(r => r.Id, r => r.Title);
 
+            var nutritionResult = await _nutrition.EnsureNutritionAsync(createdPlans);
+
             foreach (var plan in createdPlans)
             {
                 var planDto = planDtos.First(p => p.Id == plan.Id);
@@ -217,11 +222,14 @@ namespace RecipeApp.Services
                         MissingRecipe = !meal.RecipeId.HasValue && !autoHandled,
                         AutoHandled = autoHandled,
                         FreeText = meal.FreeText,
-                        IsSelected = meal.IsSelected
+                        IsSelected = meal.IsSelected,
+                        Nutrition = ToMealNutritionDto(meal)
                     };
 
                     planDto.Meals.Add(mealDto);
                 }
+
+                nutritionResult.PlanTotals.TryGetValue(plan.Id, out var planTotals);
 
                 mealPlanPayload.Plans.Add(new MealPlanSnapshotPlan
                 {
@@ -236,8 +244,10 @@ namespace RecipeApp.Services
                         MissingRecipe = m.MissingRecipe,
                         AutoHandled = m.AutoHandled,
                         FreeText = m.FreeText,
-                        IsSelected = m.IsSelected
-                    }).ToList()
+                        IsSelected = m.IsSelected,
+                        Nutrition = m.Nutrition
+                    }).ToList(),
+                    NutritionTotals = planTotals
                 });
 
                 var missingMeals = plan.Meals
@@ -253,6 +263,8 @@ namespace RecipeApp.Services
                 missingMealsDtos.AddRange(missingMeals);
             }
 
+            mealPlanPayload.WeeklyNutritionTotals = nutritionResult.WeeklyTotals;
+
             mealPlanSnapshot.JsonData = System.Text.Json.JsonSerializer.Serialize(mealPlanPayload, new JsonSerializerOptions(JsonSerializerDefaults.Web));
             _db.MealPlanSnapshots.Update(mealPlanSnapshot);
             await _db.SaveChangesAsync();
@@ -267,7 +279,36 @@ namespace RecipeApp.Services
                 MealPlanSnapshotId = mealPlanSnapshot.Id,
                 Plans = planDtos,
                 MissingMeals = missingMealsDtos,
-                ShoppingList = shoppingList
+                ShoppingList = shoppingList,
+                NutritionSummary = new MealPlanNutritionSummaryDto
+                {
+                    WeeklyTotals = nutritionResult.WeeklyTotals,
+                    Plans = createdPlans.Select(plan => new PlanNutritionSummaryDto
+                    {
+                        MealPlanId = plan.Id,
+                        Name = plan.Name,
+                        Date = plan.Date,
+                        Totals = nutritionResult.PlanTotals.TryGetValue(plan.Id, out var totals)
+                            ? totals
+                            : new NutritionBreakdownDto()
+                    }).ToList()
+                }
+            };
+        }
+
+        private static MealNutritionDto? ToMealNutritionDto(Meal meal)
+        {
+            if (meal.Calories == null && meal.Protein == null && meal.Carbs == null && meal.Fat == null)
+                return null;
+
+            return new MealNutritionDto
+            {
+                Calories = meal.Calories ?? 0,
+                Protein = meal.Protein ?? 0,
+                Carbs = meal.Carbs ?? 0,
+                Fat = meal.Fat ?? 0,
+                Source = meal.NutritionSource,
+                Estimated = meal.NutritionEstimated
             };
         }
 

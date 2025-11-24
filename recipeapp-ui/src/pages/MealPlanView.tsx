@@ -2,6 +2,18 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import axios from "axios";
 
+interface NutritionBreakdown {
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+}
+
+interface MealNutrition extends NutritionBreakdown {
+  source?: string | null;
+  estimated?: boolean;
+}
+
 interface MealPlanSnapshotMeal {
   mealId?: string;
   mealType: string;
@@ -10,6 +22,7 @@ interface MealPlanSnapshotMeal {
   autoHandled?: boolean;
   freeText?: string | null;
   isSelected?: boolean;
+  nutrition?: MealNutrition | null;
 }
 
 interface MealPlanSnapshotPlan {
@@ -17,6 +30,7 @@ interface MealPlanSnapshotPlan {
   name: string;
   date?: string;
   meals: MealPlanSnapshotMeal[];
+  nutritionTotals?: NutritionBreakdown | null;
 }
 
 interface MealPlanDetail {
@@ -26,6 +40,7 @@ interface MealPlanDetail {
   weekStart?: string;
   weekEnd?: string;
   createdAt?: string;
+  weeklyNutritionTotals?: NutritionBreakdown | null;
   plans: MealPlanSnapshotPlan[];
   shoppingListSnapshotId?: string;
 }
@@ -87,6 +102,47 @@ export default function MealPlanView() {
       0
     );
   }, [detail]);
+
+  const hasNutrition = (data?: NutritionBreakdown | null) => {
+    if (!data) return false;
+    return (
+      (data.calories ?? 0) > 0 ||
+      (data.protein ?? 0) > 0 ||
+      (data.carbs ?? 0) > 0 ||
+      (data.fat ?? 0) > 0
+    );
+  };
+
+  const formatCalories = (value?: number) => {
+    if (value === undefined || value === null) return "—";
+    return `${Math.round(value)} kcal`;
+  };
+
+  const formatGrams = (value?: number) => {
+    if (value === undefined || value === null) return "—";
+    return `${Math.round(value)} g`;
+  };
+
+  const renderNutritionStats = (data: NutritionBreakdown) => (
+    <dl className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+      <div className="rounded border border-gray-200 bg-white p-3 shadow-sm">
+        <dt className="text-xs uppercase text-gray-500">Calories</dt>
+        <dd className="text-lg font-semibold text-gray-800">{formatCalories(data.calories)}</dd>
+      </div>
+      <div className="rounded border border-gray-200 bg-white p-3 shadow-sm">
+        <dt className="text-xs uppercase text-gray-500">Protein</dt>
+        <dd className="text-lg font-semibold text-gray-800">{formatGrams(data.protein)}</dd>
+      </div>
+      <div className="rounded border border-gray-200 bg-white p-3 shadow-sm">
+        <dt className="text-xs uppercase text-gray-500">Carbs</dt>
+        <dd className="text-lg font-semibold text-gray-800">{formatGrams(data.carbs)}</dd>
+      </div>
+      <div className="rounded border border-gray-200 bg-white p-3 shadow-sm">
+        <dt className="text-xs uppercase text-gray-500">Fat</dt>
+        <dd className="text-lg font-semibold text-gray-800">{formatGrams(data.fat)}</dd>
+      </div>
+    </dl>
+  );
 
   if (loading) {
     return <div className="text-center text-gray-600 py-10">Loading meal plan…</div>;
@@ -207,6 +263,16 @@ export default function MealPlanView() {
         )}
       </div>
 
+      {hasNutrition(detail.weeklyNutritionTotals) && detail.weeklyNutritionTotals && (
+        <div className="mb-6 rounded-lg border border-blue-100 bg-blue-50 p-4 shadow-sm">
+          <div className="mb-3">
+            <h2 className="text-lg font-semibold text-blue-900">Weekly nutrition summary</h2>
+            <p className="text-sm text-blue-700">Totals reflect only the meals currently selected.</p>
+          </div>
+          {renderNutritionStats(detail.weeklyNutritionTotals)}
+        </div>
+      )}
+
       {detail.shoppingListSnapshotId && (
         <div className="mb-6">
           <Link
@@ -229,6 +295,14 @@ export default function MealPlanView() {
                   {planDate ? ` — ${planDate}` : ""}
                 </h2>
               </div>
+              {hasNutrition(plan.nutritionTotals) && plan.nutritionTotals && (
+                <div className="border-b border-blue-100 bg-blue-50 px-6 py-3 text-sm text-blue-900 flex flex-wrap gap-4">
+                  <span>🔥 {formatCalories(plan.nutritionTotals.calories)}</span>
+                  <span>💪 {formatGrams(plan.nutritionTotals.protein)} protein</span>
+                  <span>🌾 {formatGrams(plan.nutritionTotals.carbs)} carbs</span>
+                  <span>🥑 {formatGrams(plan.nutritionTotals.fat)} fat</span>
+                </div>
+              )}
               <div className="divide-y divide-gray-100">
                 {plan.meals.map((meal, idx) => (
                   <div key={`${plan.id}-${idx}`} className="px-6 py-4">
@@ -256,6 +330,20 @@ export default function MealPlanView() {
                       <p className="mt-2 text-xs text-yellow-700">
                         No recipe matched for this meal.
                       </p>
+                    )}
+                    {meal.nutrition && hasNutrition(meal.nutrition) && (
+                      <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-600">
+                        <span>🔥 {formatCalories(meal.nutrition.calories)}</span>
+                        <span>💪 {formatGrams(meal.nutrition.protein)} protein</span>
+                        <span>🌾 {formatGrams(meal.nutrition.carbs)} carbs</span>
+                        <span>🥑 {formatGrams(meal.nutrition.fat)} fat</span>
+                        {meal.nutrition.source && (
+                          <span className="text-[11px] italic text-gray-500">
+                            Source: {meal.nutrition.source}
+                            {meal.nutrition.estimated ? " (estimated)" : ""}
+                          </span>
+                        )}
+                      </div>
                     )}
                     <div className="mt-3">
                       <label className="inline-flex items-center gap-2 text-sm text-gray-700">

@@ -10,6 +10,7 @@ namespace RecipeApp.Dtos
         public string Range { get; set; } = string.Empty;
         public List<MealPlanSnapshotPlan> Plans { get; set; } = new();
         public Guid? ShoppingListSnapshotId { get; set; }
+        public NutritionBreakdownDto? WeeklyNutritionTotals { get; set; }
     }
 
     public class MealPlanSnapshotPlan
@@ -18,6 +19,7 @@ namespace RecipeApp.Dtos
         public string Name { get; set; } = string.Empty;
         public DateTime? Date { get; set; }
         public List<MealPlanSnapshotMeal> Meals { get; set; } = new();
+        public NutritionBreakdownDto? NutritionTotals { get; set; }
     }
 
     public class MealPlanSnapshotMeal
@@ -29,5 +31,6 @@ namespace RecipeApp.Dtos
         public bool AutoHandled { get; set; }
         public string? FreeText { get; set; }
         public bool IsSelected { get; set; } = true;
+        public MealNutritionDto? Nutrition { get; set; }
     }
 }

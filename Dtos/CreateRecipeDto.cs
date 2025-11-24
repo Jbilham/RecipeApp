@@ -7,6 +7,11 @@ namespace RecipeApp.Dtos
         public bool IsGlobal { get; set; }
         public Guid? AssignedUserId { get; set; }
 
+        public decimal? Calories { get; set; }
+        public decimal? Protein { get; set; }
+        public decimal? Carbs { get; set; }
+        public decimal? Fat { get; set; }
+
         public List<CreateRecipeIngredientDto> Ingredients { get; set; } = new();
     }
 }
