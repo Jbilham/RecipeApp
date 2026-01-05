@@ -17,7 +17,7 @@ namespace RecipeApp.Controllers
 
         public LlmDebugController(IConfiguration config, IHttpClientFactory httpClientFactory)
         {
-            _apiKey = config["OpenAI:ApiKey"] ?? throw new InvalidOperationException("OpenAI:ApiKey missing");
+            _apiKey = (config["OpenAI:ApiKey"] ?? throw new InvalidOperationException("OpenAI:ApiKey missing")).Trim();
             _httpClientFactory = httpClientFactory;
         }
 
@@ -36,13 +36,21 @@ namespace RecipeApp.Controllers
                 var client = _httpClientFactory.CreateClient();
                 using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
                 req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
-                req.Content = JsonContent.Create(new { model, messages });
+                var payload = new { model, messages };
+                req.Content = JsonContent.Create(payload);
 
                 var resp = await client.SendAsync(req);
                 var body = await resp.Content.ReadAsStringAsync();
+                Console.WriteLine($"[LLM DEBUG] status={(int)resp.StatusCode} model={model} body={(body.Length > 500 ? body[..500] + "..." : body)}");
                 if (!resp.IsSuccessStatusCode)
                 {
-                    return StatusCode((int)resp.StatusCode, new { ok = false, error = body, request = new { model, messages } });
+                    return StatusCode((int)resp.StatusCode, new
+                    {
+                        ok = false,
+                        status = (int)resp.StatusCode,
+                        error = body,
+                        request = payload
+                    });
                 }
 
                 using var doc = JsonDocument.Parse(body);

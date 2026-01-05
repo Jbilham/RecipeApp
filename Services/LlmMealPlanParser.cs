@@ -17,7 +17,7 @@ namespace RecipeApp.Services
         {
             _db = db;
             _httpClientFactory = httpClientFactory;
-            _apiKey = config["OpenAI:ApiKey"] ?? throw new InvalidOperationException("OpenAI:ApiKey missing");
+            _apiKey = (config["OpenAI:ApiKey"] ?? throw new InvalidOperationException("OpenAI:ApiKey missing")).Trim();
         }
 
         // -------------------- Helper Regex for quantities --------------------
@@ -87,11 +87,12 @@ namespace RecipeApp.Services
             {
                 using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
                 req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
-                req.Content = JsonContent.Create(new
+                var payload = new
                 {
                     model = "gpt-4o-mini",
                     messages
-                });
+                };
+                req.Content = JsonContent.Create(payload);
 
                 var resp = await client.SendAsync(req, ct);
                 resp.EnsureSuccessStatusCode();
