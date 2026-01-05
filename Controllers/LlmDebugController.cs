@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
-using OpenAI;
 using OpenAI.Chat;
+using System.ClientModel;
 
 namespace RecipeApp.Controllers
 {
@@ -23,8 +23,7 @@ namespace RecipeApp.Controllers
         {
             try
             {
-                var oa = new OpenAIClient(_apiKey);
-                var chatClient = oa.GetChatClient("gpt-4o-mini");
+                var chatClient = new ChatClient("gpt-4o-mini", new ApiKeyCredential(_apiKey));
                 var resp = await chatClient.CompleteChatAsync(new ChatMessage[]
                 {
                     ChatMessage.CreateSystemMessage("You are a health-check probe. Reply with a short confirmation string."),

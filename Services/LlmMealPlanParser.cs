@@ -1,8 +1,8 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
-using OpenAI;
 using OpenAI.Chat;
+using System.ClientModel;
 using RecipeApp.Data;
 
 namespace RecipeApp.Services
@@ -57,8 +57,7 @@ namespace RecipeApp.Services
                 .ToListAsync(ct);
 
             var knownTitles = string.Join("\n", dbRecipes.Select(t => $"- {t}"));
-            var oa = new OpenAIClient(_apiKey);
-            var chatClient = oa.GetChatClient("gpt-4o-mini");
+            var chatClient = new ChatClient("gpt-4o-mini", new ApiKeyCredential(_apiKey));
 
             var messages = new List<ChatMessage>
             {
