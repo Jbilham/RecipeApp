@@ -23,17 +23,29 @@ namespace RecipeApp.Controllers
         {
             try
             {
+                var model = "gpt-4o-mini";
                 var chatClient = new ChatClient(new ApiKeyCredential(_apiKey));
-                var resp = await chatClient.CompleteChatAsync(
-                    new ChatMessage[]
+
+                var messages = new ChatMessage[]
                 {
                     ChatMessage.CreateSystemMessage("You are a health-check probe. Reply with a short confirmation string."),
                     ChatMessage.CreateUserMessage("Return the text: LLM_OK")
-                },
-                    new ChatCompletionOptions { Model = "gpt-4o-mini" });
+                };
+
+                var options = new ChatCompletionOptions { Model = model };
+                var resp = await chatClient.CompleteChatAsync(messages, options);
 
                 var text = resp.Value.Content[0].Text ?? string.Empty;
-                return Ok(new { ok = true, text });
+                return Ok(new
+                {
+                    ok = true,
+                    text,
+                    request = new
+                    {
+                        model,
+                        messages = messages.Select(m => new { role = m.Role.ToString(), content = m.Content[0].Text })
+                    }
+                });
             }
             catch (Exception ex)
             {
