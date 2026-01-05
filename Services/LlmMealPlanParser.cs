@@ -57,7 +57,7 @@ namespace RecipeApp.Services
                 .ToListAsync(ct);
 
             var knownTitles = string.Join("\n", dbRecipes.Select(t => $"- {t}"));
-            var chatClient = new ChatClient("gpt-4o-mini", new ApiKeyCredential(_apiKey));
+            var chatClient = new ChatClient(new ApiKeyCredential(_apiKey));
 
             var messages = new List<ChatMessage>
             {
@@ -76,7 +76,10 @@ namespace RecipeApp.Services
 
             try
             {
-                var resp = await chatClient.CompleteChatAsync(messages);
+                var resp = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
+                {
+                    Model = "gpt-4o-mini"
+                });
                 var json = resp.Value.Content[0].Text ?? "";
                 json = Regex.Replace(json, @"^```json\s*|\s*```$", "", RegexOptions.Multiline);
 
