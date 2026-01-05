@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using OpenAI;
 using OpenAI.Chat;
-using System.ClientModel;
 
 namespace RecipeApp.Controllers
 {
@@ -24,7 +24,8 @@ namespace RecipeApp.Controllers
             try
             {
                 var model = "gpt-4o-mini";
-                var chatClient = new ChatClient(new ApiKeyCredential(_apiKey));
+                var oa = new OpenAIClient(_apiKey);
+                var chatClient = oa.GetChatClient(model);
 
                 var messages = new ChatMessage[]
                 {
@@ -32,8 +33,7 @@ namespace RecipeApp.Controllers
                     ChatMessage.CreateUserMessage("Return the text: LLM_OK")
                 };
 
-                var options = new ChatCompletionOptions { Model = model };
-                var resp = await chatClient.CompleteChatAsync(messages, options);
+                var resp = await chatClient.CompleteChatAsync(messages);
 
                 var text = resp.Value.Content[0].Text ?? string.Empty;
                 return Ok(new
@@ -43,7 +43,7 @@ namespace RecipeApp.Controllers
                     request = new
                     {
                         model,
-                        messages = messages.Select(m => new { role = m.Role.ToString(), content = m.Content[0].Text })
+                        messages = messages.Select(m => new { type = m.GetType().Name, content = m.Content[0].Text })
                     }
                 });
             }

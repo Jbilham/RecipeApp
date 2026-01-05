@@ -1,8 +1,8 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using OpenAI;
 using OpenAI.Chat;
-using System.ClientModel;
 using RecipeApp.Data;
 
 namespace RecipeApp.Services
@@ -57,7 +57,8 @@ namespace RecipeApp.Services
                 .ToListAsync(ct);
 
             var knownTitles = string.Join("\n", dbRecipes.Select(t => $"- {t}"));
-            var chatClient = new ChatClient(new ApiKeyCredential(_apiKey));
+            var oa = new OpenAIClient(_apiKey);
+            var chatClient = oa.GetChatClient("gpt-4o-mini");
 
             var messages = new List<ChatMessage>
             {
@@ -76,10 +77,7 @@ namespace RecipeApp.Services
 
             try
             {
-                var resp = await chatClient.CompleteChatAsync(messages, new ChatCompletionOptions
-                {
-                    Model = "gpt-4o-mini"
-                });
+                var resp = await chatClient.CompleteChatAsync(messages);
                 var json = resp.Value.Content[0].Text ?? "";
                 json = Regex.Replace(json, @"^```json\s*|\s*```$", "", RegexOptions.Multiline);
 
