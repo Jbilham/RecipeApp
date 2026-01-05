@@ -10,13 +10,12 @@ namespace RecipeApp.Services
     public class LlmMealPlanParser
     {
         private readonly AppDb _db;
-        private readonly OpenAIClient _oa;
+        private readonly string _apiKey;
 
         public LlmMealPlanParser(AppDb db, IConfiguration config)
         {
             _db = db;
-            var apiKey = config["OpenAI:ApiKey"] ?? throw new InvalidOperationException("OpenAI:ApiKey missing");
-            _oa = new OpenAIClient(apiKey);
+            _apiKey = config["OpenAI:ApiKey"] ?? throw new InvalidOperationException("OpenAI:ApiKey missing");
         }
 
         // -------------------- Helper Regex for quantities --------------------
@@ -53,10 +52,13 @@ namespace RecipeApp.Services
             var dbRecipes = await _db.Recipes
                 .AsNoTracking()
                 .Select(r => r.Title)
+                .Where(t => t != null && t.Trim() != string.Empty)
+                .Take(30) // keep prompt small to avoid request size errors
                 .ToListAsync(ct);
 
             var knownTitles = string.Join("\n", dbRecipes.Select(t => $"- {t}"));
-            var chatClient = _oa.GetChatClient("gpt-4.1-mini");
+            var oa = new OpenAIClient(_apiKey);
+            var chatClient = oa.GetChatClient("gpt-4o-mini");
 
             var messages = new List<ChatMessage>
             {
@@ -98,7 +100,7 @@ namespace RecipeApp.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"❌ LLM parse failed: {ex.Message}");
+                Console.WriteLine($"❌ LLM parse failed: {ex}");
                 return null;
             }
         }

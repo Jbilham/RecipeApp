@@ -113,8 +113,8 @@ namespace RecipeApp.Services
                     continue;
                 }
 
-                var parsed = await _llm.ParseAsync(textForDay);
-                if (parsed == null)
+                var parsed = await _llm.ParseAsync(textForDay) ?? BuildFallbackParsedPlan(textForDay);
+                if (parsed?.Meals == null || !parsed.Meals.Any())
                 {
                     continue;
                 }
@@ -331,6 +331,40 @@ namespace RecipeApp.Services
                 return "https://" + url.Substring("webcal://".Length);
             }
             return url;
+        }
+
+        private static LlmMealPlanParser.ParsedMealPlan BuildFallbackParsedPlan(string text)
+        {
+            // Basic fallback when LLM parsing fails: one meal per line of text.
+            var lines = (text ?? string.Empty)
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(l => l.Trim())
+                .Where(l => l.Length > 0)
+                .ToList();
+
+            var meals = new List<LlmMealPlanParser.ParsedMeal>();
+            foreach (var line in lines)
+            {
+                meals.Add(new LlmMealPlanParser.ParsedMeal
+                {
+                    MealType = InferMealType(line),
+                    MatchedRecipeTitle = null,
+                    UnmatchedMealTitle = line,
+                    FreeTextItems = new List<string> { line }
+                });
+            }
+
+            return new LlmMealPlanParser.ParsedMealPlan { Meals = meals };
+        }
+
+        private static string InferMealType(string text)
+        {
+            var lower = text.ToLowerInvariant();
+            if (lower.Contains("breakfast")) return "Breakfast";
+            if (lower.Contains("lunch")) return "Lunch";
+            if (lower.Contains("dinner") || lower.Contains("tea")) return "Dinner";
+            if (lower.Contains("snack")) return "Snack";
+            return "Meal";
         }
 
     }
