@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
-using OpenAI;
 using OpenAI.Chat;
+using System.ClientModel;
 
 namespace RecipeApp.Controllers
 {
@@ -24,8 +24,7 @@ namespace RecipeApp.Controllers
             try
             {
                 var model = "gpt-4o-mini";
-                var oa = new OpenAIClient(_apiKey);
-                var chatClient = oa.GetChatClient(model);
+                var chatClient = new ChatClient(model, new ApiKeyCredential(_apiKey));
 
                 var messages = new ChatMessage[]
                 {
