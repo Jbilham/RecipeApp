@@ -1,9 +1,9 @@
+using System.Net.Http;
+using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
-using OpenAI.Chat;
 using RecipeApp.Data;
-using System.ClientModel;
 
 namespace RecipeApp.Services
 {
@@ -11,10 +11,12 @@ namespace RecipeApp.Services
     {
         private readonly AppDb _db;
         private readonly string _apiKey;
+        private readonly IHttpClientFactory _httpClientFactory;
 
-        public LlmMealPlanParser(AppDb db, IConfiguration config)
+        public LlmMealPlanParser(AppDb db, IConfiguration config, IHttpClientFactory httpClientFactory)
         {
             _db = db;
+            _httpClientFactory = httpClientFactory;
             _apiKey = config["OpenAI:ApiKey"] ?? throw new InvalidOperationException("OpenAI:ApiKey missing");
         }
 
@@ -57,11 +59,14 @@ namespace RecipeApp.Services
                 .ToListAsync(ct);
 
             var knownTitles = string.Join("\n", dbRecipes.Select(t => $"- {t}"));
-            var chatClient = new ChatClient("gpt-4o-mini", new ApiKeyCredential(_apiKey));
+            var client = _httpClientFactory.CreateClient();
 
-            var messages = new List<ChatMessage>
+            var messages = new[]
             {
-                ChatMessage.CreateSystemMessage(
+                new
+                {
+                    role = "system",
+                    content =
                     "You are a meal-plan parser. Return ONLY valid JSON matching this schema:\n" +
                     "{ \"meals\": [ { \"mealType\": string, \"matchedRecipeTitle\": string|null, \"unmatchedMealTitle\": string|null, \"freeTextItems\": string[] } ] }\n" +
                     "Rules:\n" +
@@ -70,14 +75,34 @@ namespace RecipeApp.Services
                     "3) unmatchedMealTitle = fallback dish name if not found in known recipes.\n" +
                     "4) Extract ALL freeTextItems (snacks, sides, fruit, protein, etc.).\n" +
                     "5) NO commentary, only JSON."
-                ),
-                ChatMessage.CreateUserMessage($"KNOWN_RECIPES:\n{knownTitles}\n\nMEAL_PLAN_TEXT:\n{freeText}")
+                },
+                new
+                {
+                    role = "user",
+                    content = $"KNOWN_RECIPES:\n{knownTitles}\n\nMEAL_PLAN_TEXT:\n{freeText}"
+                }
             };
 
             try
             {
-                var resp = await chatClient.CompleteChatAsync(messages);
-                var json = resp.Value.Content[0].Text ?? "";
+                using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
+                req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
+                req.Content = JsonContent.Create(new
+                {
+                    model = "gpt-4o-mini",
+                    messages
+                });
+
+                var resp = await client.SendAsync(req, ct);
+                resp.EnsureSuccessStatusCode();
+
+                using var doc = await JsonDocument.ParseAsync(await resp.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+                var json = doc.RootElement
+                    .GetProperty("choices")[0]
+                    .GetProperty("message")
+                    .GetProperty("content")
+                    .GetString() ?? string.Empty;
+
                 json = Regex.Replace(json, @"^```json\s*|\s*```$", "", RegexOptions.Multiline);
 
                 var parsed = JsonSerializer.Deserialize<ParsedMealPlan>(json, new JsonSerializerOptions
