@@ -74,16 +74,20 @@ namespace RecipeApp.Services
                 : startOfThisWeek;
             var endDate = startDate.AddDays(7);
 
-            var events = calendar.Events
+            var eventsQuery = calendar.Events
                 .Where(e => e?.Start?.Value != null)
                 .Select(e => new
                 {
                     Event = e,
                     Date = e.Start!.Value.Date
-                })
-                .Where(e => e.Date >= startDate && e.Date < endDate)
-                .OrderBy(e => e.Date)
-                .ToList();
+                });
+
+            var events = range.Equals("all", StringComparison.OrdinalIgnoreCase)
+                ? eventsQuery.OrderBy(e => e.Date).ToList()
+                : eventsQuery
+                    .Where(e => e.Date >= startDate && e.Date < endDate)
+                    .OrderBy(e => e.Date)
+                    .ToList();
 
             var groupedByDay = events.GroupBy(e => e.Date).OrderBy(g => g.Key);
 
@@ -145,8 +149,16 @@ namespace RecipeApp.Services
 
             var shoppingList = await _shopping.BuildAsync(allRecipeIds, allFreeExtras);
 
-            var weekStartUtc = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
-            var weekEndUtc = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
+            var weekStart = startDate;
+            var weekEnd = endDate;
+            if (range.Equals("all", StringComparison.OrdinalIgnoreCase) && events.Any())
+            {
+                weekStart = events.Min(e => e.Date);
+                weekEnd = events.Max(e => e.Date).AddDays(1);
+            }
+
+            var weekStartUtc = DateTime.SpecifyKind(weekStart, DateTimeKind.Utc);
+            var weekEndUtc = DateTime.SpecifyKind(weekEnd, DateTimeKind.Utc);
 
             var mealPlanSnapshot = new MealPlanSnapshot
             {

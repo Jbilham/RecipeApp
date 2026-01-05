@@ -98,12 +98,8 @@ await app.SeedIdentityAsync();
 app.UseCors("AllowFrontend");
 
 // --- Middleware ---
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
+app.UseSwagger();
+app.UseSwaggerUI();
 app.UseHttpsRedirection();
 app.UseDefaultFiles();
 app.UseStaticFiles();
