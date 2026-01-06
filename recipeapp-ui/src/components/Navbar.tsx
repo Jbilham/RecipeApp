@@ -23,37 +23,44 @@ export default function Navbar() {
         )}
       </div>
       <div className="flex items-center gap-4">
-        <Link to="/" className="hover:text-yellow-300">
-          Home
-        </Link>
-        <Link to="/upload-recipe" className="hover:text-yellow-300">
-          Upload Recipe
-        </Link>
-        <Link to="/upload-mealplan" className="hover:text-yellow-300">
-          Meal Plan
-        </Link>
-        <Link to="/import" className="hover:text-yellow-300">
-          TrainingPeaks Import
-        </Link>
-        <Link to="/meal-plans" className="hover:text-yellow-300">
-          Meal Plans
-        </Link>
-        <Link to="/shopping-lists" className="hover:text-yellow-300">
-          Shopping Lists
-        </Link>
+        {user && (
+          <>
+            <Link to="/" className="hover:text-yellow-300">
+              Home
+            </Link>
+            <Link to="/upload-recipe" className="hover:text-yellow-300">
+              Upload Recipe
+            </Link>
+            <Link to="/upload-mealplan" className="hover:text-yellow-300">
+              Meal Plan
+            </Link>
+            <Link to="/import" className="hover:text-yellow-300">
+              TrainingPeaks Import
+            </Link>
+            <Link to="/meal-plans" className="hover:text-yellow-300">
+              Meal Plans
+            </Link>
+            <Link to="/shopping-lists" className="hover:text-yellow-300">
+              Shopping Lists
+            </Link>
+          </>
+        )}
         {canManageUsers && (
           <Link to="/users" className="font-semibold hover:text-yellow-300">
             User Management
           </Link>
         )}
         {user ? (
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="rounded-full border border-white/40 px-4 py-1 text-sm font-semibold text-white transition hover:bg-white/20"
-          >
-            Log out
-          </button>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-white/80">{user.email}</span>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-full border border-white/40 px-4 py-1 text-sm font-semibold text-white transition hover:bg-white/20"
+            >
+              Log out
+            </button>
+          </div>
         ) : (
           <Link
             to="/login"

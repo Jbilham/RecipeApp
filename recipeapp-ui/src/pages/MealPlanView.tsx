@@ -158,6 +158,12 @@ export default function MealPlanView() {
 
   const weekLabel = formatDate(detail.weekStart);
   const createdLabel = formatDateTime(detail.createdAt);
+  const sortedPlans = [...detail.plans].sort((a, b) => {
+    const da = a.date ? new Date(a.date).getTime() : 0;
+    const db = b.date ? new Date(b.date).getTime() : 0;
+    return da - db;
+  });
+  const icsUrl = id ? `/api/mealplans/${id}/ics` : undefined;
 
   const handleToggleMeal = (planId: string, mealId: string | undefined, isSelected: boolean) => {
     if (!mealId) return;
@@ -284,87 +290,88 @@ export default function MealPlanView() {
         </div>
       )}
 
-      <div className="space-y-6">
-        {detail.plans.map((plan) => {
+      {icsUrl && (
+        <div className="mb-6">
+          <a
+            href={icsUrl}
+            className="inline-flex items-center rounded-md border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50"
+          >
+            Download calendar (.ics)
+          </a>
+        </div>
+      )}
+
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        {sortedPlans.map((plan) => {
           const planDate = formatDate(plan.date);
           return (
             <div key={plan.id} className="rounded-lg border border-gray-200 bg-white shadow">
-              <div className="border-b border-gray-100 bg-gray-50 px-6 py-3">
-                <h2 className="text-lg font-semibold text-gray-800">
-                  {plan.name}
-                  {planDate ? ` — ${planDate}` : ""}
-                </h2>
-              </div>
-              {hasNutrition(plan.nutritionTotals) && plan.nutritionTotals && (
-                <div className="border-b border-blue-100 bg-blue-50 px-6 py-3 text-sm text-blue-900 flex flex-wrap gap-4">
-                  <span>🔥 {formatCalories(plan.nutritionTotals.calories)}</span>
-                  <span>💪 {formatGrams(plan.nutritionTotals.protein)} protein</span>
-                  <span>🌾 {formatGrams(plan.nutritionTotals.carbs)} carbs</span>
-                  <span>🥑 {formatGrams(plan.nutritionTotals.fat)} fat</span>
+              <div className="border-b border-gray-100 bg-gray-50 px-6 py-3 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase text-gray-500">{planDate}</p>
+                  <h2 className="text-lg font-semibold text-gray-800">{plan.name}</h2>
                 </div>
-              )}
+                {hasNutrition(plan.nutritionTotals) && plan.nutritionTotals && (
+                  <div className="text-xs text-right text-gray-700">
+                    <div className="font-semibold">{formatCalories(plan.nutritionTotals.calories)}</div>
+                    <div>Protein: {formatGrams(plan.nutritionTotals.protein)}</div>
+                    <div>Carbs: {formatGrams(plan.nutritionTotals.carbs)}</div>
+                    <div>Fat: {formatGrams(plan.nutritionTotals.fat)}</div>
+                  </div>
+                )}
+              </div>
               <div className="divide-y divide-gray-100">
                 {plan.meals.map((meal, idx) => (
                   <div key={`${plan.id}-${idx}`} className="px-6 py-4">
-                    <div className="flex items-baseline justify-between gap-4">
-                      <h3 className="text-base font-semibold text-gray-800">{meal.mealType}</h3>
-                      {meal.autoHandled && (
-                        <span className="text-xs font-semibold text-green-600">
-                          auto-classified snack
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-1 text-sm text-gray-700">
-                      {meal.recipeName ? (
-                        <>
-                          <span className="font-medium">{meal.recipeName}</span>
-                          {meal.freeText ? ` — ${meal.freeText}` : ""}
-                        </>
-                      ) : meal.freeText ? (
-                        meal.freeText
-                      ) : (
-                        <span className="text-red-600">No recipe details</span>
-                      )}
-                    </p>
-                    {meal.missingRecipe && !meal.autoHandled && (
-                      <p className="mt-2 text-xs text-yellow-700">
-                        No recipe matched for this meal.
-                      </p>
-                    )}
-                    {meal.nutrition && hasNutrition(meal.nutrition) && (
-                      <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-600">
-                        <span>🔥 {formatCalories(meal.nutrition.calories)}</span>
-                        <span>💪 {formatGrams(meal.nutrition.protein)} protein</span>
-                        <span>🌾 {formatGrams(meal.nutrition.carbs)} carbs</span>
-                        <span>🥑 {formatGrams(meal.nutrition.fat)} fat</span>
-                        {meal.nutrition.source && (
-                          <span className="text-[11px] italic text-gray-500">
-                            Source: {meal.nutrition.source}
-                            {meal.nutrition.estimated ? " (estimated)" : ""}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    <div className="mt-3">
-                      <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                        <input
-                          type="checkbox"
-                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          checked={meal.isSelected !== false}
-                          disabled={!meal.mealId}
-                          onChange={(event) =>
-                            handleToggleMeal(plan.id, meal.mealId, event.target.checked)
-                          }
-                        />
-                        <span>
-                          Include in shopping list
-                          {!meal.mealId && " (unavailable)"}
-                        </span>
-                      </label>
-                      {meal.isSelected === false && (
-                        <p className="mt-1 text-xs text-gray-500">
-                          This meal is excluded from the shopping list.
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            checked={meal.isSelected !== false}
+                            disabled={!meal.mealId}
+                            onChange={(event) =>
+                              handleToggleMeal(plan.id, meal.mealId, event.target.checked)
+                            }
+                          />
+                          <span className="text-sm font-semibold text-gray-800">{meal.mealType}</span>
+                        </div>
+                        <p className="text-sm text-gray-700">
+                          {meal.recipeName ? (
+                            <>
+                              <span className="font-medium">{meal.recipeName}</span>
+                              {meal.freeText ? ` — ${meal.freeText}` : ""}
+                            </>
+                          ) : meal.freeText ? (
+                            meal.freeText
+                          ) : (
+                            <span className="text-red-600">No recipe details</span>
+                          )}
                         </p>
+                        {meal.freeText && (
+                          <p className="text-xs text-gray-500 line-clamp-2">{meal.freeText}</p>
+                        )}
+                        <div className="flex flex-wrap gap-1 text-[11px]">
+                          {meal.missingRecipe && !meal.autoHandled && (
+                            <span className="rounded bg-yellow-100 px-2 py-0.5 text-yellow-800">
+                              Missing recipe
+                            </span>
+                          )}
+                          {meal.autoHandled && (
+                            <span className="rounded bg-blue-100 px-2 py-0.5 text-blue-800">
+                              Auto-handled
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {meal.nutrition && hasNutrition(meal.nutrition) && (
+                        <div className="text-xs text-gray-700 text-right">
+                          <div className="font-semibold">{formatCalories(meal.nutrition.calories)}</div>
+                          <div>Protein: {formatGrams(meal.nutrition.protein)}</div>
+                          <div>Carbs: {formatGrams(meal.nutrition.carbs)}</div>
+                          <div>Fat: {formatGrams(meal.nutrition.fat)}</div>
+                        </div>
                       )}
                     </div>
                   </div>

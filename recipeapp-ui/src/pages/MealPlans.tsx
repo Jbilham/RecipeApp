@@ -21,7 +21,7 @@ export default function MealPlans() {
   useEffect(() => {
     const fetchPlans = async () => {
       try {
-        const res = await axios.get<MealPlanSummary[]>("http://localhost:5114/api/mealplans");
+        const res = await axios.get<MealPlanSummary[]>("/api/mealplans");
         setPlans(res.data);
       } catch (err: any) {
         console.error(err);
