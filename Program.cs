@@ -82,6 +82,7 @@ builder.Services.AddScoped<ShoppingListBuilder>();
 builder.Services.AddScoped<MealPlanAssembler>();
 builder.Services.AddScoped<MealPlanNutritionService>();
 builder.Services.AddScoped<ICalendarImportService, CalendarImportService>();
+builder.Services.AddHostedService<TrainingPeaksRefreshService>();
 
 // --- OpenAI setup ---
 var apiKey = builder.Configuration["OpenAI:ApiKey"];

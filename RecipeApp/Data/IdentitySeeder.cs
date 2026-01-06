@@ -65,7 +65,8 @@ namespace RecipeApp.Data
                     Email = email,
                     EmailConfirmed = true,
                     Role = role,
-                    ParentUserId = parentUserId
+                    ParentUserId = parentUserId,
+                    PublicCalendarToken = Guid.NewGuid().ToString("N")
                 };
 
                 var createResult = await userManager.CreateAsync(user, password);
@@ -87,6 +88,12 @@ namespace RecipeApp.Data
             if (user.ParentUserId != parentUserId)
             {
                 user.ParentUserId = parentUserId;
+                requiresUpdate = true;
+            }
+
+            if (string.IsNullOrWhiteSpace(user.PublicCalendarToken))
+            {
+                user.PublicCalendarToken = Guid.NewGuid().ToString("N");
                 requiresUpdate = true;
             }
 

@@ -12,5 +12,7 @@ namespace RecipeApp.Models
         public ICollection<AppUser> Children { get; set; } = new List<AppUser>();
 
         public string? TrainingPeaksIcsUrl { get; set; }
+
+        public string? PublicCalendarToken { get; set; }
     }
 }

@@ -11,6 +11,7 @@ using System.Linq;
 using System.Text.Json;
 using Ical.Net;
 using Ical.Net.Serialization;
+using Microsoft.AspNetCore.Authorization;
 
 namespace RecipeApp.Controllers
 {
@@ -295,6 +296,24 @@ namespace RecipeApp.Controllers
             return await ExportIcsAsync(snapshot.Id);
         }
 
+        // Return the public ICS URL for the current user (create token if missing)
+        [HttpGet("ics/url")]
+        [Authorize]
+        public async Task<IActionResult> GetMyCalendarUrlAsync()
+        {
+            var user = await _userContext.GetCurrentUserAsync();
+            if (string.IsNullOrWhiteSpace(user.PublicCalendarToken))
+            {
+                user.PublicCalendarToken = Guid.NewGuid().ToString("N");
+                _db.Users.Update(user);
+                await _db.SaveChangesAsync();
+            }
+
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var url = $"{baseUrl}/api/mealplans/ics/public/{user.PublicCalendarToken}";
+            return Ok(new { url });
+        }
+
         private static string BuildTitle(MealPlanSnapshotPayload? payload)
         {
             if (payload != null && payload.WeekStart != default)
@@ -303,6 +322,85 @@ namespace RecipeApp.Controllers
             }
 
             return "Meal Plan";
+        }
+
+        [AllowAnonymous]
+        [HttpGet("ics/public/{token}")]
+        public async Task<IActionResult> ExportPublicIcsAsync(string token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+                return BadRequest("Token is required.");
+
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.PublicCalendarToken == token);
+            if (user == null)
+                return NotFound();
+
+            var snapshot = await _db.MealPlanSnapshots
+                .Where(s => s.CreatedById == user.Id)
+                .OrderByDescending(s => s.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (snapshot == null)
+                return NotFound("No meal plan snapshots for this user.");
+
+            // Temporarily bypass visibleUserIds since this is a public feed per user
+            var payload = DeserializeSnapshot(snapshot.JsonData);
+            if (payload == null || payload.Plans == null || payload.Plans.Count == 0)
+                return BadRequest("Snapshot is empty.");
+
+            // Default meal times
+            var today = DateTime.UtcNow.Date;
+            var diffToMonday = ((int)today.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+            var startOfThisWeek = today.AddDays(-diffToMonday);
+            var endOfNextWeek = startOfThisWeek.AddDays(14);
+
+            var defaults = new Dictionary<string, TimeSpan>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "breakfast", new TimeSpan(7, 30, 0) },
+                { "mid-morning", new TimeSpan(10, 30, 0) },
+                { "snack", new TimeSpan(10, 30, 0) },
+                { "lunch", new TimeSpan(12, 30, 0) },
+                { "mid-afternoon", new TimeSpan(15, 0, 0) },
+                { "afternoon snack", new TimeSpan(15, 0, 0) },
+                { "dinner", new TimeSpan(19, 0, 0) },
+                { "evening", new TimeSpan(19, 0, 0) }
+            };
+
+            var calendar = new Ical.Net.Calendar();
+            foreach (var plan in payload.Plans
+                         .Where(p => p.Date.HasValue &&
+                                     p.Date.Value.Date >= startOfThisWeek &&
+                                     p.Date.Value.Date < endOfNextWeek)
+                         .OrderBy(p => p.Date))
+            {
+                if (plan.Meals == null || plan.Meals.Count == 0 || plan.Date == null)
+                    continue;
+
+                foreach (var meal in plan.Meals.Where(m => m.IsSelected != false))
+                {
+                    var time = defaults
+                        .Where(kvp => meal.MealType != null && meal.MealType.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
+                        .Select(kvp => kvp.Value)
+                        .FirstOrDefault(new TimeSpan(12, 0, 0));
+
+                    var start = DateTime.SpecifyKind(plan.Date.Value.Date + time, DateTimeKind.Utc);
+                    var ev = new Ical.Net.CalendarComponents.CalendarEvent
+                    {
+                        Summary = string.IsNullOrWhiteSpace(meal.RecipeName)
+                            ? (meal.FreeText ?? meal.MealType ?? "Meal")
+                            : meal.RecipeName,
+                        Description = meal.FreeText,
+                        Start = new Ical.Net.DataTypes.CalDateTime(start),
+                        End = new Ical.Net.DataTypes.CalDateTime(start.AddMinutes(45))
+                    };
+                    calendar.Events.Add(ev);
+                }
+            }
+
+            var serializer = new Ical.Net.Serialization.CalendarSerializer();
+            var ics = serializer.SerializeToString(calendar);
+            var bytes = System.Text.Encoding.UTF8.GetBytes(ics);
+            return File(bytes, "text/calendar", "mealplan.ics");
         }
 
         private static MealPlanSnapshotPayload? DeserializeSnapshot(string json)

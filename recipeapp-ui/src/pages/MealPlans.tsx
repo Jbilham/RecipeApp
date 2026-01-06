@@ -17,6 +17,8 @@ export default function MealPlans() {
   const [plans, setPlans] = useState<MealPlanSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [icsUrl, setIcsUrl] = useState<string | null>(null);
+  const [icsError, setIcsError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchPlans = async () => {
@@ -33,6 +35,17 @@ export default function MealPlans() {
 
     fetchPlans();
   }, []);
+
+  const fetchIcsUrl = async () => {
+    setIcsError(null);
+    try {
+      const res = await axios.get<{ url: string }>("/api/mealplans/ics/url");
+      setIcsUrl(res.data.url);
+    } catch (err: any) {
+      console.error(err);
+      setIcsError(err.message || "Failed to fetch calendar link.");
+    }
+  };
 
   const formatDate = (value?: string) => {
     if (!value) return null;
@@ -56,6 +69,24 @@ export default function MealPlans() {
   return (
     <div className="max-w-5xl mx-auto p-8">
       <h1 className="text-3xl font-bold text-blue-700 mb-6">Saved Meal Plans</h1>
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={fetchIcsUrl}
+          className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+        >
+          Get calendar subscription link
+        </button>
+        {icsUrl && (
+          <a
+            href={icsUrl}
+            className="inline-flex items-center rounded-md border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50"
+          >
+            {icsUrl}
+          </a>
+        )}
+        {icsError && <span className="text-sm text-red-600">❌ {icsError}</span>}
+      </div>
 
       {loading && <p className="text-gray-600">Loading meal plans…</p>}
       {error && <p className="text-red-600">❌ {error}</p>}
