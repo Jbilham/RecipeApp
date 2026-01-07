@@ -260,12 +260,12 @@ namespace RecipeApp.Controllers
                         .FirstOrDefault(new TimeSpan(12, 0, 0));
 
                     var start = DateTime.SpecifyKind(plan.Date.Value.Date + time, DateTimeKind.Utc);
+                    var summary = BuildEventSummary(meal);
+                    var desc = BuildEventDescription(meal);
                     var ev = new Ical.Net.CalendarComponents.CalendarEvent
                     {
-                        Summary = string.IsNullOrWhiteSpace(meal.RecipeName)
-                            ? (meal.FreeText ?? meal.MealType ?? "Meal")
-                            : meal.RecipeName,
-                        Description = meal.FreeText,
+                        Summary = summary,
+                        Description = desc,
                         Start = new Ical.Net.DataTypes.CalDateTime(start),
                         End = new Ical.Net.DataTypes.CalDateTime(start.AddMinutes(45))
                     };
@@ -274,7 +274,7 @@ namespace RecipeApp.Controllers
             }
 
             var serializer = new Ical.Net.Serialization.CalendarSerializer();
-            var ics = serializer.SerializeToString(calendar);
+            var ics = serializer.SerializeToString(calendar) ?? string.Empty;
             var bytes = System.Text.Encoding.UTF8.GetBytes(ics);
             return File(bytes, "text/calendar", "mealplan.ics");
         }
@@ -384,12 +384,12 @@ namespace RecipeApp.Controllers
                         .FirstOrDefault(new TimeSpan(12, 0, 0));
 
                     var start = DateTime.SpecifyKind(plan.Date.Value.Date + time, DateTimeKind.Utc);
+                    var summary = BuildEventSummary(meal);
+                    var desc = BuildEventDescription(meal);
                     var ev = new Ical.Net.CalendarComponents.CalendarEvent
                     {
-                        Summary = string.IsNullOrWhiteSpace(meal.RecipeName)
-                            ? (meal.FreeText ?? meal.MealType ?? "Meal")
-                            : meal.RecipeName,
-                        Description = meal.FreeText,
+                        Summary = summary,
+                        Description = desc,
                         Start = new Ical.Net.DataTypes.CalDateTime(start),
                         End = new Ical.Net.DataTypes.CalDateTime(start.AddMinutes(45))
                     };
@@ -398,7 +398,7 @@ namespace RecipeApp.Controllers
             }
 
             var serializer = new Ical.Net.Serialization.CalendarSerializer();
-            var ics = serializer.SerializeToString(calendar);
+            var ics = serializer.SerializeToString(calendar) ?? string.Empty;
             var bytes = System.Text.Encoding.UTF8.GetBytes(ics);
             return File(bytes, "text/calendar", "mealplan.ics");
         }
@@ -415,6 +415,48 @@ namespace RecipeApp.Controllers
                 return null;
             }
         }
+
+        private static string BuildEventSummary(MealPlanSnapshotMeal meal)
+        {
+            var name = string.IsNullOrWhiteSpace(meal.RecipeName)
+                ? (meal.FreeText ?? "Meal")
+                : meal.RecipeName;
+            var label = HasNutrition(meal.Nutrition)
+                ? $" ({FormatKcal(meal.Nutrition!.Calories)} | {FormatGrams(meal.Nutrition.Protein)}P/{FormatGrams(meal.Nutrition.Carbs)}C/{FormatGrams(meal.Nutrition.Fat)}F)"
+                : string.Empty;
+            return $"{meal.MealType}: {name}{label}";
+        }
+
+        private static string BuildEventDescription(MealPlanSnapshotMeal meal)
+        {
+            if (!HasNutrition(meal.Nutrition))
+                return meal.FreeText ?? string.Empty;
+
+            var parts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(meal.FreeText))
+                parts.Add(meal.FreeText);
+            parts.Add($"Calories: {FormatKcal(meal.Nutrition!.Calories)}");
+            parts.Add($"Protein: {FormatGrams(meal.Nutrition.Protein)} g");
+            parts.Add($"Carbs: {FormatGrams(meal.Nutrition.Carbs)} g");
+            parts.Add($"Fat: {FormatGrams(meal.Nutrition.Fat)} g");
+            return string.Join("\n", parts);
+        }
+
+        private static bool HasNutrition(MealNutritionDto? n)
+        {
+            if (n == null) return false;
+            var cals = n.Calories.GetValueOrDefault();
+            var p = n.Protein.GetValueOrDefault();
+            var carbs = n.Carbs.GetValueOrDefault();
+            var fat = n.Fat.GetValueOrDefault();
+            return cals > 0 || p > 0 || carbs > 0 || fat > 0;
+        }
+
+        private static string FormatKcal(decimal? value) =>
+            value.HasValue ? Math.Round(value.Value).ToString("0") + " kcal" : "—";
+
+        private static string FormatGrams(decimal? value) =>
+            value.HasValue ? Math.Round(value.Value).ToString("0") : "—";
 
         private async Task<RebuildResult> RebuildSnapshotAsync(MealPlanSnapshot snapshot, MealPlanSnapshotPayload payload)
         {

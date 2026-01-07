@@ -366,11 +366,19 @@ export default function MealPlanView() {
                         </div>
                       </div>
                       {meal.nutrition && hasNutrition(meal.nutrition) && (
-                        <div className="text-xs text-gray-700 text-right">
+                        <div className="text-xs text-gray-700 text-right space-y-1">
                           <div className="font-semibold">{formatCalories(meal.nutrition.calories)}</div>
-                          <div>Protein: {formatGrams(meal.nutrition.protein)}</div>
-                          <div>Carbs: {formatGrams(meal.nutrition.carbs)}</div>
-                          <div>Fat: {formatGrams(meal.nutrition.fat)}</div>
+                          <div className="flex flex-wrap gap-2 justify-end">
+                            <span className="rounded-full bg-blue-50 px-2 py-0.5">
+                              P: {formatGrams(meal.nutrition.protein)} g
+                            </span>
+                            <span className="rounded-full bg-yellow-50 px-2 py-0.5">
+                              C: {formatGrams(meal.nutrition.carbs)} g
+                            </span>
+                            <span className="rounded-full bg-amber-50 px-2 py-0.5">
+                              F: {formatGrams(meal.nutrition.fat)} g
+                            </span>
+                          </div>
                         </div>
                       )}
                     </div>
