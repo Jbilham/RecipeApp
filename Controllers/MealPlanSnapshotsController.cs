@@ -445,18 +445,14 @@ namespace RecipeApp.Controllers
         private static bool HasNutrition(MealNutritionDto? n)
         {
             if (n == null) return false;
-            var cals = n.Calories.GetValueOrDefault();
-            var p = n.Protein.GetValueOrDefault();
-            var carbs = n.Carbs.GetValueOrDefault();
-            var fat = n.Fat.GetValueOrDefault();
-            return cals > 0 || p > 0 || carbs > 0 || fat > 0;
+            return n.Calories > 0 || n.Protein > 0 || n.Carbs > 0 || n.Fat > 0;
         }
 
-        private static string FormatKcal(decimal? value) =>
-            value.HasValue ? Math.Round(value.Value).ToString("0") + " kcal" : "—";
+        private static string FormatKcal(decimal value) =>
+            Math.Round(value).ToString("0") + " kcal";
 
-        private static string FormatGrams(decimal? value) =>
-            value.HasValue ? Math.Round(value.Value).ToString("0") : "—";
+        private static string FormatGrams(decimal value) =>
+            Math.Round(value).ToString("0");
 
         private async Task<RebuildResult> RebuildSnapshotAsync(MealPlanSnapshot snapshot, MealPlanSnapshotPayload payload)
         {

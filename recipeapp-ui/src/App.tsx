@@ -11,6 +11,7 @@ import MealPlans from "./pages/MealPlans";
 import MealPlanView from "./pages/MealPlanView";
 import Login from "./pages/Login";
 import UserManagement from "./pages/UserManagement";
+import Recipes from "./pages/Recipes";
 
 export default function App() {
   return (
@@ -87,6 +88,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <UserManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/recipes"
+          element={
+            <ProtectedRoute>
+              <Recipes />
             </ProtectedRoute>
           }
         />

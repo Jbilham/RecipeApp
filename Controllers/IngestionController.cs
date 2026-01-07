@@ -7,6 +7,7 @@ using RecipeApp.Services;
 using OpenAI;
 using OpenAI.Chat;
 using System.Text.Json;
+using System.ClientModel;
 
 namespace RecipeApp.Controllers
 {
@@ -15,13 +16,13 @@ namespace RecipeApp.Controllers
     public class IngestionController : ControllerBase
     {
         private readonly AppDb _db;
-        private readonly OpenAIClient _openAI;
+        private readonly string _apiKey;
         private readonly IUserContext _userContext;
 
-        public IngestionController(AppDb db, OpenAIClient openAI, IUserContext userContext)
+        public IngestionController(AppDb db, IConfiguration config, IUserContext userContext)
         {
             _db = db;
-            _openAI = openAI;
+            _apiKey = (config["OpenAI:ApiKey"] ?? throw new InvalidOperationException("OpenAI:ApiKey missing")).Trim();
             _userContext = userContext;
         }
 
@@ -59,7 +60,7 @@ namespace RecipeApp.Controllers
             try
             {
                 var bytes = await System.IO.File.ReadAllBytesAsync(tempPath);
-                var chatClient = _openAI.GetChatClient("gpt-4.1-mini");
+                var chatClient = new ChatClient("gpt-4o-mini", new ApiKeyCredential(_apiKey));
 
                 var response = await chatClient.CompleteChatAsync(new[]
                 {
@@ -155,15 +156,16 @@ namespace RecipeApp.Controllers
             }
         }
 
-// ✅ MULTI IMAGE UPLOAD (Batch)
-            [HttpPost("upload/batch")]
-            [Consumes("multipart/form-data")]
-            public async Task<IActionResult> UploadBatch([FromForm] UploadRecipeImageDto dto)
-            {
-                var files = dto.Files;
-                if (files == null || files.Count == 0)
-                    return BadRequest("No files uploaded.");     var chatClient = _openAI.GetChatClient("gpt-4.1-mini");
-            
+        // ✅ MULTI IMAGE UPLOAD (Batch)
+        [HttpPost("upload/batch")]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> UploadBatch([FromForm] UploadRecipeImageDto dto)
+        {
+            var files = dto.Files;
+            if (files == null || files.Count == 0)
+                return BadRequest("No files uploaded.");
+
+            var chatClient = new ChatClient("gpt-4o-mini", new ApiKeyCredential(_apiKey));
             var currentUser = await _userContext.GetCurrentUserAsync();
             var createdRecipes = new List<object>();
 

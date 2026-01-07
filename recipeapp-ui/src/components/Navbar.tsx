@@ -11,6 +11,7 @@ export default function Navbar() {
   };
 
   const canManageUsers = user && user.role !== "Client";
+  const canSeeRecipes = user && user.role !== "Client";
 
   return (
     <nav className="flex items-center justify-between bg-blue-600 px-6 py-4 text-white shadow-md">
@@ -43,6 +44,11 @@ export default function Navbar() {
             <Link to="/shopping-lists" className="hover:text-yellow-300">
               Shopping Lists
             </Link>
+            {canSeeRecipes && (
+              <Link to="/recipes" className="hover:text-yellow-300">
+                Recipes
+              </Link>
+            )}
           </>
         )}
         {canManageUsers && (

@@ -20,6 +20,62 @@ namespace RecipeApp.Controllers
             _userContext = userContext;
         }
 
+        /// <summary>
+        /// Filter recipes by macros (only for Master/Nutritionist).
+        /// </summary>
+        [HttpGet("filter")]
+        public async Task<IActionResult> Filter(
+            [FromQuery] decimal? minCalories = null,
+            [FromQuery] decimal? maxCalories = null,
+            [FromQuery] decimal? minProtein = null,
+            [FromQuery] decimal? maxProtein = null,
+            [FromQuery] decimal? minCarbs = null,
+            [FromQuery] decimal? maxCarbs = null,
+            [FromQuery] decimal? minFat = null,
+            [FromQuery] decimal? maxFat = null)
+        {
+            var currentUser = await _userContext.GetCurrentUserAsync();
+            if (!string.Equals(currentUser.Role, "Master", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(currentUser.Role, "Nutritionist", StringComparison.OrdinalIgnoreCase))
+            {
+                return Forbid();
+            }
+
+            var visibleUserIds = await _userContext.GetVisibleUserIdsAsync();
+
+            var query = _db.Recipes
+                .AsNoTracking()
+                .Where(r => r.IsGlobal ||
+                            (r.OwnerId.HasValue && visibleUserIds.Contains(r.OwnerId.Value)) ||
+                            (r.AssignedToId.HasValue && visibleUserIds.Contains(r.AssignedToId.Value)));
+
+            if (minCalories.HasValue) query = query.Where(r => r.Calories >= minCalories.Value);
+            if (maxCalories.HasValue) query = query.Where(r => r.Calories <= maxCalories.Value);
+            if (minProtein.HasValue) query = query.Where(r => r.Protein >= minProtein.Value);
+            if (maxProtein.HasValue) query = query.Where(r => r.Protein <= maxProtein.Value);
+            if (minCarbs.HasValue) query = query.Where(r => r.Carbs >= minCarbs.Value);
+            if (maxCarbs.HasValue) query = query.Where(r => r.Carbs <= maxCarbs.Value);
+            if (minFat.HasValue) query = query.Where(r => r.Fat >= minFat.Value);
+            if (maxFat.HasValue) query = query.Where(r => r.Fat <= maxFat.Value);
+
+            var results = await query
+                .OrderBy(r => r.Title)
+                .Select(r => new
+                {
+                    r.Id,
+                    r.Title,
+                    r.Calories,
+                    r.Protein,
+                    r.Carbs,
+                    r.Fat,
+                    r.Servings,
+                    r.IsGlobal
+                })
+                .ToListAsync();
+
+            return Ok(results);
+        }
+
         // GET: api/recipes
         [HttpGet]
         public async Task<IActionResult> GetAll()
