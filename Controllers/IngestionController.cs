@@ -8,6 +8,7 @@ using OpenAI;
 using OpenAI.Chat;
 using System.Text.Json;
 using System.ClientModel;
+using Microsoft.AspNetCore.Hosting;
 
 namespace RecipeApp.Controllers
 {
@@ -18,12 +19,16 @@ namespace RecipeApp.Controllers
         private readonly AppDb _db;
         private readonly string _apiKey;
         private readonly IUserContext _userContext;
+        private readonly LlmNutritionEstimator _nutritionEstimator;
+        private readonly IWebHostEnvironment _env;
 
-        public IngestionController(AppDb db, IConfiguration config, IUserContext userContext)
+        public IngestionController(AppDb db, IConfiguration config, IUserContext userContext, LlmNutritionEstimator nutritionEstimator, IWebHostEnvironment env)
         {
             _db = db;
             _apiKey = (config["OpenAI:ApiKey"] ?? throw new InvalidOperationException("OpenAI:ApiKey missing")).Trim();
             _userContext = userContext;
+            _nutritionEstimator = nutritionEstimator;
+            _env = env;
         }
 
         private static (decimal? amount, string? unit) ParseQuantity(string? quantity)
@@ -67,8 +72,10 @@ namespace RecipeApp.Controllers
                     ChatMessage.CreateUserMessage(new ChatMessageContentPart[]
                     {
                         ChatMessageContentPart.CreateTextPart(
-                            "Extract the recipe name, servings, and ingredients as structured JSON. " +
-                            "Use this schema: { title: string, servings: number, ingredients: [ { name: string, quantity: string } ] }"
+                            "Extract recipe details as JSON with macros if present. " +
+                            "Schema: { title: string, servings: number, calories?: number, protein?: number, carbs?: number, fat?: number, " +
+                            "ingredients: [ { name: string, quantity: string } ] }. " +
+                            "Calories/protein/carbs/fat should be per serving if shown. Return ONLY JSON."
                         ),
                         ChatMessageContentPart.CreateImagePart(new BinaryData(bytes), file.ContentType)
                     })
@@ -86,6 +93,7 @@ namespace RecipeApp.Controllers
                     return BadRequest("Failed to parse recipe content.");
 
                 var currentUser = await _userContext.GetCurrentUserAsync();
+                var imageUrl = SaveRecipeImage(file, tempPath);
 
                 var recipe = new Recipe
                 {
@@ -95,7 +103,8 @@ namespace RecipeApp.Controllers
                     RecipeIngredients = new List<RecipeIngredient>(),
                     OwnerId = currentUser.Id,
                     IsGlobal = false,
-                    AssignedToId = currentUser.Role == "Client" ? currentUser.Id : null
+                    AssignedToId = currentUser.Role == "Client" ? currentUser.Id : null,
+                    ImageUrl = imageUrl
                 };
 
                 foreach (var i in extracted.Ingredients)
@@ -128,6 +137,42 @@ namespace RecipeApp.Controllers
                         Unit = unit,
                         Notes = i.Quantity
                     });
+                }
+
+                // Apply macros from card if present
+                if (extracted.Calories.HasValue) recipe.Calories = extracted.Calories.Value;
+                if (extracted.Protein.HasValue) recipe.Protein = extracted.Protein.Value;
+                if (extracted.Carbs.HasValue) recipe.Carbs = extracted.Carbs.Value;
+                if (extracted.Fat.HasValue) recipe.Fat = extracted.Fat.Value;
+                recipe.MacrosEstimated = extracted.Calories.HasValue || extracted.Protein.HasValue ||
+                                         extracted.Carbs.HasValue || extracted.Fat.HasValue;
+
+                // If macros missing, estimate from ingredients
+                if (!HasMacroValues(recipe))
+                {
+                    var ingredientLines = recipe.RecipeIngredients.Select(ri =>
+                    {
+                        var parts = new List<string>();
+                        if (ri.Amount.HasValue) parts.Add(ri.Amount.Value.ToString());
+                        if (!string.IsNullOrWhiteSpace(ri.Unit?.Code)) parts.Add(ri.Unit!.Code!);
+                        parts.Add(ri.Ingredient.Name);
+                        return string.Join(" ", parts);
+                    });
+
+                    var estimate = await _nutritionEstimator.EstimateRecipeAsync(
+                        recipe.Title,
+                        ingredientLines,
+                        recipe.Servings,
+                        HttpContext.RequestAborted);
+
+                    if (estimate != null)
+                    {
+                        recipe.Calories = estimate.Calories;
+                        recipe.Protein = estimate.Protein;
+                        recipe.Carbs = estimate.Carbs;
+                        recipe.Fat = estimate.Fat;
+                        recipe.MacrosEstimated = true;
+                    }
                 }
 
                 _db.Recipes.Add(recipe);
@@ -182,14 +227,17 @@ namespace RecipeApp.Controllers
                 try
                 {
                     var bytes = await System.IO.File.ReadAllBytesAsync(tempPath);
+                    var imageUrl = SaveRecipeImage(file, tempPath);
 
                     var response = await chatClient.CompleteChatAsync(new[]
                     {
                         ChatMessage.CreateUserMessage(new ChatMessageContentPart[]
                         {
                             ChatMessageContentPart.CreateTextPart(
-                                "Extract the recipe name, servings, and ingredients as structured JSON. " +
-                                "Use this schema: { title: string, servings: number, ingredients: [ { name: string, quantity: string } ] }"
+                                "Extract recipe details as JSON with macros if present. " +
+                                "Schema: { title: string, servings: number, calories?: number, protein?: number, carbs?: number, fat?: number, " +
+                                "ingredients: [ { name: string, quantity: string } ] }. " +
+                                "Calories/protein/carbs/fat should be per serving if shown. Return ONLY JSON."
                             ),
                             ChatMessageContentPart.CreateImagePart(new BinaryData(bytes), file.ContentType)
                         })
@@ -210,7 +258,8 @@ namespace RecipeApp.Controllers
                         Id = Guid.NewGuid(),
                         Title = extracted.Title,
                         Servings = extracted.Servings,
-                        RecipeIngredients = new List<RecipeIngredient>()
+                        RecipeIngredients = new List<RecipeIngredient>(),
+                        ImageUrl = imageUrl
                     };
                     recipe.OwnerId = currentUser.Id;
                     recipe.IsGlobal = false;
@@ -248,6 +297,40 @@ namespace RecipeApp.Controllers
                         });
                     }
 
+                    if (extracted.Calories.HasValue) recipe.Calories = extracted.Calories.Value;
+                    if (extracted.Protein.HasValue) recipe.Protein = extracted.Protein.Value;
+                    if (extracted.Carbs.HasValue) recipe.Carbs = extracted.Carbs.Value;
+                    if (extracted.Fat.HasValue) recipe.Fat = extracted.Fat.Value;
+                    recipe.MacrosEstimated = extracted.Calories.HasValue || extracted.Protein.HasValue ||
+                                             extracted.Carbs.HasValue || extracted.Fat.HasValue;
+
+                    if (!HasMacroValues(recipe))
+                    {
+                        var ingredientLines = recipe.RecipeIngredients.Select(ri =>
+                        {
+                            var parts = new List<string>();
+                            if (ri.Amount.HasValue) parts.Add(ri.Amount.Value.ToString());
+                            if (!string.IsNullOrWhiteSpace(ri.Unit?.Code)) parts.Add(ri.Unit!.Code!);
+                            parts.Add(ri.Ingredient.Name);
+                            return string.Join(" ", parts);
+                        });
+
+                        var estimate = await _nutritionEstimator.EstimateRecipeAsync(
+                            recipe.Title,
+                            ingredientLines,
+                            recipe.Servings,
+                            HttpContext.RequestAborted);
+
+                        if (estimate != null)
+                        {
+                            recipe.Calories = estimate.Calories;
+                            recipe.Protein = estimate.Protein;
+                            recipe.Carbs = estimate.Carbs;
+                            recipe.Fat = estimate.Fat;
+                            recipe.MacrosEstimated = true;
+                        }
+                    }
+
                     _db.Recipes.Add(recipe);
 
                     createdRecipes.Add(new
@@ -275,6 +358,30 @@ namespace RecipeApp.Controllers
 
             await _db.SaveChangesAsync();
             return Ok(new { recipes = createdRecipes });
+        }
+
+        private static bool HasMacroValues(Recipe recipe)
+        {
+            return (recipe.Calories > 0) || (recipe.Protein > 0) || (recipe.Carbs > 0) || (recipe.Fat > 0);
+        }
+
+        private string SaveRecipeImage(IFormFile file, string tempPath)
+        {
+            var uploadsRoot = Path.Combine(_env.WebRootPath ?? "wwwroot", "uploads", "recipes");
+            Directory.CreateDirectory(uploadsRoot);
+
+            var ext = Path.GetExtension(file.FileName);
+            if (string.IsNullOrWhiteSpace(ext))
+            {
+                ext = ".jpg";
+            }
+
+            var fileName = $"{Guid.NewGuid()}{ext}";
+            var destPath = Path.Combine(uploadsRoot, fileName);
+            System.IO.File.Copy(tempPath, destPath, true);
+
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            return $"{baseUrl}/uploads/recipes/{fileName}";
         }
     }
 }

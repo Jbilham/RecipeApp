@@ -214,8 +214,8 @@ namespace RecipeApp.Services
             };
 
             var recipeLookup = await _db.Recipes.AsNoTracking()
-                .Select(r => new { r.Id, r.Title })
-                .ToDictionaryAsync(r => r.Id, r => r.Title);
+                .Select(r => new { r.Id, r.Title, r.ImageUrl })
+                .ToDictionaryAsync(r => r.Id, r => r);
 
             var nutritionResult = await _nutrition.EnsureNutritionAsync(createdPlans);
 
@@ -225,17 +225,18 @@ namespace RecipeApp.Services
                 foreach (var meal in plan.Meals)
                 {
                     var autoHandled = MealUtilities.ShouldAutoHandleMeal(meal);
-                    var mealDto = new CalendarImportMealDto
-                    {
-                        MealId = meal.Id,
-                        MealType = meal.MealType,
-                        RecipeId = meal.RecipeId,
-                        RecipeName = meal.RecipeId.HasValue && recipeLookup.TryGetValue(meal.RecipeId.Value, out var title) ? title : null,
-                        MissingRecipe = !meal.RecipeId.HasValue && !autoHandled,
-                        AutoHandled = autoHandled,
-                        FreeText = meal.FreeText,
-                        IsSelected = meal.IsSelected,
-                        Nutrition = ToMealNutritionDto(meal)
+                        var mealDto = new CalendarImportMealDto
+                        {
+                            MealId = meal.Id,
+                            MealType = meal.MealType,
+                            RecipeId = meal.RecipeId,
+                            RecipeName = meal.RecipeId.HasValue && recipeLookup.TryGetValue(meal.RecipeId.Value, out var rec) ? rec.Title : null,
+                            RecipeImageUrl = meal.RecipeId.HasValue && recipeLookup.TryGetValue(meal.RecipeId.Value, out var rec2) ? rec2.ImageUrl : null,
+                            MissingRecipe = !meal.RecipeId.HasValue && !autoHandled,
+                            AutoHandled = autoHandled,
+                            FreeText = meal.FreeText,
+                            IsSelected = meal.IsSelected,
+                            Nutrition = ToMealNutritionDto(meal)
                     };
 
                     planDto.Meals.Add(mealDto);

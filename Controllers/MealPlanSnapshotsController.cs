@@ -430,7 +430,7 @@ namespace RecipeApp.Controllers
         private static string BuildEventDescription(MealPlanSnapshotMeal meal)
         {
             if (!HasNutrition(meal.Nutrition))
-                return meal.FreeText ?? string.Empty;
+                return AppendImage(meal, meal.FreeText ?? string.Empty);
 
             var parts = new List<string>();
             if (!string.IsNullOrWhiteSpace(meal.FreeText))
@@ -439,7 +439,8 @@ namespace RecipeApp.Controllers
             parts.Add($"Protein: {FormatGrams(meal.Nutrition.Protein)} g");
             parts.Add($"Carbs: {FormatGrams(meal.Nutrition.Carbs)} g");
             parts.Add($"Fat: {FormatGrams(meal.Nutrition.Fat)} g");
-            return string.Join("\n", parts);
+            var body = string.Join("\n", parts);
+            return AppendImage(meal, body);
         }
 
         private static bool HasNutrition(MealNutritionDto? n)
@@ -453,6 +454,17 @@ namespace RecipeApp.Controllers
 
         private static string FormatGrams(decimal value) =>
             Math.Round(value).ToString("0");
+
+        private static string AppendImage(MealPlanSnapshotMeal meal, string body)
+        {
+            if (string.IsNullOrWhiteSpace(meal.RecipeImageUrl))
+                return body;
+
+            if (string.IsNullOrWhiteSpace(body))
+                return $"Image: {meal.RecipeImageUrl}";
+
+            return $"{body}\nImage: {meal.RecipeImageUrl}";
+        }
 
         private async Task<RebuildResult> RebuildSnapshotAsync(MealPlanSnapshot snapshot, MealPlanSnapshotPayload payload)
         {
@@ -477,28 +489,30 @@ namespace RecipeApp.Controllers
             {
                 nutritionResult.PlanTotals.TryGetValue(plan.Id, out var totals);
 
-                var planPayload = new MealPlanSnapshotPlan
-                {
-                    Id = plan.Id,
-                    Name = plan.Name,
-                    Date = plan.Date,
-                    NutritionTotals = totals,
-                    Meals = plan.Meals
-                        .OrderBy(m => m.MealType)
-                        .ThenBy(m => m.Id)
-                        .Select(meal =>
-                        {
-                            var autoHandled = MealUtilities.ShouldAutoHandleMeal(meal);
-                            return new MealPlanSnapshotMeal
+                    var planPayload = new MealPlanSnapshotPlan
+                    {
+                        Id = plan.Id,
+                        Name = plan.Name,
+                        Date = plan.Date,
+                        NutritionTotals = totals,
+                        Meals = plan.Meals
+                            .OrderBy(m => m.MealType)
+                            .ThenBy(m => m.Id)
+                            .Select(meal =>
                             {
-                                MealId = meal.Id,
-                                MealType = meal.MealType,
-                                RecipeName = meal.Recipe?.Title,
-                                MissingRecipe = !meal.RecipeId.HasValue && !autoHandled,
-                                AutoHandled = autoHandled,
-                                FreeText = meal.FreeText,
-                                IsSelected = meal.IsSelected,
-                                Nutrition = ToMealNutritionDto(meal)
+                                var autoHandled = MealUtilities.ShouldAutoHandleMeal(meal);
+                                return new MealPlanSnapshotMeal
+                                {
+                                    MealId = meal.Id,
+                                    RecipeId = meal.RecipeId,
+                                    MealType = meal.MealType,
+                                    RecipeName = meal.Recipe?.Title,
+                                    RecipeImageUrl = meal.Recipe?.ImageUrl,
+                                    MissingRecipe = !meal.RecipeId.HasValue && !autoHandled,
+                                    AutoHandled = autoHandled,
+                                    FreeText = meal.FreeText,
+                                    IsSelected = meal.IsSelected,
+                                    Nutrition = ToMealNutritionDto(meal)
                             };
                         })
                         .ToList()

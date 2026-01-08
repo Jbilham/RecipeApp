@@ -25,8 +25,10 @@ namespace RecipeApp.Dtos
     public class MealPlanSnapshotMeal
     {
         public Guid MealId { get; set; }
+        public Guid? RecipeId { get; set; }
         public string MealType { get; set; } = string.Empty;
         public string? RecipeName { get; set; }
+        public string? RecipeImageUrl { get; set; }
         public bool MissingRecipe { get; set; }
         public bool AutoHandled { get; set; }
         public string? FreeText { get; set; }

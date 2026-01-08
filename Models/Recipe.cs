@@ -23,6 +23,8 @@ namespace RecipeApp.Models
         public decimal? Fat { get; set; }
         public bool MacrosEstimated { get; set; }
 
+        public string? ImageUrl { get; set; }
+
         public ICollection<RecipeIngredient> RecipeIngredients { get; set; } = new List<RecipeIngredient>();
         public ICollection<RecipeTag> RecipeTags { get; set; } = new List<RecipeTag>();
     }

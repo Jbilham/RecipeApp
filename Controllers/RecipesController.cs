@@ -32,7 +32,8 @@ namespace RecipeApp.Controllers
             [FromQuery] decimal? minCarbs = null,
             [FromQuery] decimal? maxCarbs = null,
             [FromQuery] decimal? minFat = null,
-            [FromQuery] decimal? maxFat = null)
+            [FromQuery] decimal? maxFat = null,
+            [FromQuery] string? mainIngredient = null)
         {
             var currentUser = await _userContext.GetCurrentUserAsync();
             if (!string.Equals(currentUser.Role, "Master", StringComparison.OrdinalIgnoreCase) &&
@@ -57,6 +58,12 @@ namespace RecipeApp.Controllers
             if (maxCarbs.HasValue) query = query.Where(r => r.Carbs <= maxCarbs.Value);
             if (minFat.HasValue) query = query.Where(r => r.Fat >= minFat.Value);
             if (maxFat.HasValue) query = query.Where(r => r.Fat <= maxFat.Value);
+            if (!string.IsNullOrWhiteSpace(mainIngredient))
+            {
+                var mi = mainIngredient.Trim();
+                query = query.Where(r => r.RecipeIngredients.Any(ri =>
+                    EF.Functions.ILike(ri.Ingredient.Name, $"%{mi}%")));
+            }
 
             var results = await query
                 .OrderBy(r => r.Title)
@@ -69,7 +76,8 @@ namespace RecipeApp.Controllers
                     r.Carbs,
                     r.Fat,
                     r.Servings,
-                    r.IsGlobal
+                    r.IsGlobal,
+                    r.ImageUrl
                 })
                 .ToListAsync();
 

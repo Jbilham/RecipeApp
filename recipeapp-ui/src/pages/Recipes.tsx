@@ -11,6 +11,7 @@ interface RecipeRow {
   fat?: number;
   servings?: number;
   isGlobal: boolean;
+  imageUrl?: string;
 }
 
 export default function Recipes() {
@@ -27,6 +28,7 @@ export default function Recipes() {
   const [maxCarbs, setMaxCarbs] = useState("");
   const [minFat, setMinFat] = useState("");
   const [maxFat, setMaxFat] = useState("");
+  const [mainIngredient, setMainIngredient] = useState("");
 
   const fetchRecipes = async () => {
     setLoading(true);
@@ -41,6 +43,7 @@ export default function Recipes() {
       if (maxCarbs) params.maxCarbs = maxCarbs;
       if (minFat) params.minFat = minFat;
       if (maxFat) params.maxFat = maxFat;
+      if (mainIngredient) params.mainIngredient = mainIngredient;
 
       const res = await axios.get<RecipeRow[]>("/api/recipes/filter", { params });
       setRecipes(res.data);
@@ -56,6 +59,17 @@ export default function Recipes() {
     fetchRecipes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Delete this recipe?")) return;
+    try {
+      await axios.delete(`/api/recipes/${id}`);
+      setRecipes((prev) => prev.filter((r) => r.id !== id));
+    } catch (err: any) {
+      console.error(err);
+      setError(err.response?.data ?? err.message ?? "Failed to delete recipe.");
+    }
+  };
 
   const canView = user && user.role !== "Client";
 
@@ -156,6 +170,15 @@ export default function Recipes() {
             placeholder="e.g. 30"
           />
         </div>
+        <div className="md:col-span-4">
+          <label className="text-xs uppercase text-gray-600">Main ingredient (e.g. chicken, beef, vegetarian)</label>
+          <input
+            value={mainIngredient}
+            onChange={(e) => setMainIngredient(e.target.value)}
+            className="mt-1 w-full rounded border px-2 py-1 text-sm"
+            placeholder="e.g. chicken"
+          />
+        </div>
       </div>
 
       {loading && <p className="text-gray-600">Loading recipes…</p>}
@@ -168,22 +191,41 @@ export default function Recipes() {
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {recipes.map((r) => (
           <div key={r.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-800">{r.title}</h2>
-                <p className="text-xs uppercase text-gray-500">
-                  {r.isGlobal ? "Global" : "Private"}
-                  {r.servings ? ` · Servings: ${r.servings}` : ""}
-                </p>
-              </div>
-              <div className="text-right text-sm text-gray-700">
-                <div className="font-semibold">{r.calories ? `${Math.round(r.calories)} kcal` : "—"}</div>
-                <div className="flex gap-2 justify-end text-xs">
-                  <span className="rounded bg-blue-50 px-2 py-0.5">P: {r.protein ?? "—"}g</span>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-800">{r.title}</h2>
+                    <p className="text-xs uppercase text-gray-500">
+                      {r.isGlobal ? "Global" : "Private"}
+                      {r.servings ? ` · Servings: ${r.servings}` : ""}
+                    </p>
+                    {r.imageUrl && (
+                      <a
+                        href={r.imageUrl}
+                        className="text-xs text-blue-600 underline"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        View image
+                      </a>
+                    )}
+                  </div>
+                  <div className="text-right text-sm text-gray-700">
+                    <div className="font-semibold">{r.calories ? `${Math.round(r.calories)} kcal` : "—"}</div>
+                    <div className="flex gap-2 justify-end text-xs">
+                      <span className="rounded bg-blue-50 px-2 py-0.5">P: {r.protein ?? "—"}g</span>
                   <span className="rounded bg-yellow-50 px-2 py-0.5">C: {r.carbs ?? "—"}g</span>
                   <span className="rounded bg-amber-50 px-2 py-0.5">F: {r.fat ?? "—"}g</span>
                 </div>
               </div>
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => handleDelete(r.id)}
+                className="rounded-md border border-red-200 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
+              >
+                Delete
+              </button>
             </div>
           </div>
         ))}

@@ -10,6 +10,7 @@ namespace RecipeApp.Dtos
         public string MealType { get; set; } = string.Empty;
         public Guid? RecipeId { get; set; }
         public string? RecipeName { get; set; }
+        public string? RecipeImageUrl { get; set; }
         public bool MissingRecipe { get; set; }
         public bool AutoHandled { get; set; }
         public string? FreeText { get; set; }
